@@ -172,9 +172,8 @@ install_tmp kmod-nft-socket
 #install_tmp kernel
 install_tmp sing-box "https://github.com/SagerNet/sing-box/releases/download/v1.11.15/sing-box_1.11.15_openwrt_${ARCH}.ipk"
 install_tmp hysteria
-opkg update
 opkg --force-overwrite upgrade luci-app-passwall2
-opkg --force-overwrite upgrade sing-box
+#opkg --force-overwrite upgrade sing-box
 
 # Function to verify installation
 verify_installation() {
