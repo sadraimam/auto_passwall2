@@ -174,6 +174,7 @@ install_tmp sing-box "https://github.com/SagerNet/sing-box/releases/download/v1.
 install_tmp hysteria
 opkg update
 opkg --force-overwrite upgrade luci-app-passwall2
+opkg --force-overwrite upgrade sing-box
 
 # Function to verify installation
 verify_installation() {
