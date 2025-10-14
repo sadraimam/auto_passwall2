@@ -157,8 +157,8 @@ install_tmp() {
 
 ARCH=$(opkg print-architecture | grep -E 'aarch64|arm|mips|x86' | awk '{print $2}')
 # Main Install Sequence
-opkg remove dnsmasq
-install_tmp dnsmasq-full
+#opkg remove dnsmasq
+#install_tmp dnsmasq-full
 install_tmp luci-app-passwall2 "https://github.com/xiaorouji/openwrt-passwall2/releases/download/25.7.15-1/luci-24.10_luci-app-passwall2_25.7.15-r1_all.ipk"
 install_tmp ipset
 install_tmp kmod-tun
