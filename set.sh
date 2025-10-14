@@ -220,17 +220,12 @@ uci delete passwall2.Proxy
 uci delete passwall2.UDP
 uci delete passwall2.@global_subscribe[0].filter_discard_list
 
-uci set passwall2.myshunt.Direct='_direct'
-uci set passwall2.myshunt.DirectGame='_direct'
-uci set passwall2.myshunt.remarks='MainShunt'
-
 uci set passwall2.Direct=shunt_rules
-uci set passwall2.Direct.remarks='IRAN' #Remove: not needed
 uci set passwall2.Direct.network='tcp,udp'
+uci set passwall2.Direct.remarks='IRAN'
 
   # Optimized IP List (includes geoip:ir + all private/special ranges)
-uci set passwall2.Direct.ip_list='geoip:ir
-0.0.0.0/8
+uci set passwall2.Direct.ip_list='0.0.0.0/8
 10.0.0.0/8
 100.64.0.0/10
 127.0.0.0/8
@@ -240,7 +235,7 @@ uci set passwall2.Direct.ip_list='geoip:ir
 192.0.2.0/24
 192.88.99.0/24
 192.168.0.0/16
-198.18.0.0/15
+198.19.0.0/16
 198.51.100.0/24
 203.0.113.0/24
 224.0.0.0/4
@@ -257,16 +252,21 @@ uci set passwall2.Direct.ip_list='geoip:ir
 2002::/16
 fc00::/7
 fe80::/10
-ff00::/8'
+ff00::/8
+geoip:ir'
 
   # Improved Domain List: geo-based + known local portals
-uci set passwall2.Direct.domain_list='geosite:ir
+uci set passwall2.Direct.domain_list='regexp:^.+\.ir$
 geosite:category-ir
+geosite:ir
 full:my.irancell.ir
 full:my.mci.ir
 full:login.tci.ir
-full:local.tci.ir
-regexp:^.+\.ir$'
+full:local.tci.ir'
+
+uci set passwall2.myshunt.Direct='_direct'
+uci set passwall2.myshunt.DirectGame='_direct'
+uci set passwall2.myshunt.remarks='MainShunt'
 
   # Save and apply
 uci commit passwall2
