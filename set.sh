@@ -73,7 +73,8 @@ ntpd -n -q -p ir.pool.ntp.org || {
 echo -e "${CYAN}Current system time: $(date)${NC}"
 
 # Add Passwall Feeds
-wget -O /tmp/passwall.pub https://master.dl.sourceforge.net/project/openwrt-passwall-build/passwall.pub
+#wget -O /tmp/passwall.pub https://master.dl.sourceforge.net/project/openwrt-passwall-build/passwall.pub
+wget -O /tmp/passwall.pub https://master.dl.sourceforge.net/project/openwrt-passwall-build/ipk.pub
 opkg-key add /tmp/passwall.pub
 rm -f /tmp/passwall.pub
 > /etc/opkg/customfeeds.conf
