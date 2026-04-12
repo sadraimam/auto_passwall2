@@ -172,7 +172,7 @@ install_tmp luci-app-passwall2 "https://github.com/Openwrt-Passwall/openwrt-pass
 #install_tmp kmod-inet-diag
 #install_tmp kernel
 install_tmp sing-box "https://github.com/SagerNet/sing-box/releases/download/v1.11.15/sing-box_1.11.15_openwrt_${ARCH}.ipk"
-install_tmp hysteria
+#install_tmp hysteria
 #opkg --force-overwrite upgrade luci-app-passwall2
 #opkg --force-overwrite upgrade sing-box
 
