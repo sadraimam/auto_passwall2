@@ -45,11 +45,11 @@ echo -e "${CYAN}IPv6: $(uci get network.wan6.dns)${NC}"
 echo -e "${GREEN}Network Initialized!${NC}"
 
 # Internet check
-until ping -c1 -W1 8.8.8.8 >/dev/null 2>&1; do
-    echo -e "${YELLOW}Waiting for Internet...${NC}"
-    sleep 2
-done
-echo -e "${GREEN}Internet is reachable!${NC}"
+#until ping -c1 -W1 8.8.8.8 >/dev/null 2>&1; do
+#    echo -e "${YELLOW}Waiting for Internet...${NC}"
+#    sleep 2
+#done
+#echo -e "${GREEN}Internet is reachable!${NC}"
 
 # Initialize Time/Date
 uci set system.@system[0].zonename='Asia/Tehran'
