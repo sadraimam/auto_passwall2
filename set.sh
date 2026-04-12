@@ -161,6 +161,7 @@ ARCH=$(opkg print-architecture | grep -E 'aarch64|arm|mips|x86' | awk '{print $2
 #opkg remove dnsmasq
 #install_tmp dnsmasq-full
 #install_tmp luci-app-passwall2 "https://github.com/Openwrt-Passwall/openwrt-passwall2/releases/download/26.4.10-1/luci-app-passwall2_26.4.10-r1_all.ipk"
+install_tmp luci-app-passwall2
 #install_tmp ipset
 #install_tmp kmod-tun
 #install_tmp kmod-nft-tproxy
@@ -172,7 +173,8 @@ ARCH=$(opkg print-architecture | grep -E 'aarch64|arm|mips|x86' | awk '{print $2
 #install_tmp kmod-inet-diag
 #install_tmp kernel
 #install_tmp sing-box "https://github.com/SagerNet/sing-box/releases/download/v1.11.15/sing-box_1.11.15_openwrt_${ARCH}.ipk"
-#install_tmp hysteria
+install_tmp sing-box
+install_tmp hysteria
 #opkg --force-overwrite upgrade luci-app-passwall2
 #opkg --force-overwrite upgrade sing-box
 
