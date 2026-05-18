@@ -31,6 +31,7 @@ uci add_list network.wan.dns="8.8.4.4"
 uci add_list network.wan.dns="8.8.8.8"
 uci add_list network.wan.dns="1.0.0.1"
 uci add_list network.wan.dns="1.1.1.1"
+uci add_list network.wan.dns="5.200.200.200"
 uci del network.wan6.dns 2>/dev/null
 uci set network.wan6.peerdns="0"
 uci add_list network.wan6.dns="2001:4860:4860::8844"
@@ -45,11 +46,11 @@ echo -e "${CYAN}IPv6: $(uci get network.wan6.dns)${NC}"
 echo -e "${GREEN}Network Initialized!${NC}"
 
 # Internet check
-#until ping -c1 -W1 8.8.8.8 >/dev/null 2>&1; do
-#    echo -e "${YELLOW}Waiting for Internet...${NC}"
-#    sleep 2
-#done
-#echo -e "${GREEN}Internet is reachable!${NC}"
+until ping -c1 -W1 8.8.8.8 >/dev/null 2>&1; do
+    echo -e "${YELLOW}Waiting for Internet...${NC}"
+    sleep 2
+done
+echo -e "${GREEN}Internet is reachable!${NC}"
 
 # Initialize Time/Date
 uci set system.@system[0].zonename='Asia/Tehran'
@@ -160,19 +161,19 @@ ARCH=$(opkg print-architecture | grep -E 'aarch64|arm|mips|x86' | awk '{print $2
 # Main Install Sequence
 opkg remove dnsmasq
 install_tmp dnsmasq-full
-install_tmp sing-box
-#install_tmp luci-app-passwall2 "https://github.com/Openwrt-Passwall/openwrt-passwall2/releases/download/26.4.10-1/luci-app-passwall2_26.4.10-r1_all.ipk"
-install_tmp luci-app-passwall2
-#install_tmp ipset
-#install_tmp kmod-tun
-#install_tmp kmod-nft-tproxy
-#install_tmp kmod-nft-socket
-#install_tmp kmod-netlink-diag
-#install_tmp wget-ssl
-#install_tmp unzip
-#install_tmp ca-bundle
-#install_tmp kmod-inet-diag
-#install_tmp kernel
+#install_tmp sing-box
+install_tmp luci-app-passwall2 "https://github.com/Openwrt-Passwall/openwrt-passwall2/releases/download/26.4.10-1/luci-app-passwall2_26.4.10-r1_all.ipk"
+#install_tmp luci-app-passwall2
+install_tmp ipset
+install_tmp kmod-tun
+install_tmp kmod-nft-tproxy
+install_tmp kmod-nft-socket
+install_tmp kmod-netlink-diag
+install_tmp wget-ssl
+install_tmp unzip
+install_tmp ca-bundle
+install_tmp kmod-inet-diag
+install_tmp kernel
 #install_tmp sing-box "https://github.com/SagerNet/sing-box/releases/download/v1.11.15/sing-box_1.11.15_openwrt_${ARCH}.ipk"
 #install_tmp hysteria
 #opkg --force-overwrite upgrade luci-app-passwall2
@@ -217,13 +218,13 @@ uci set passwall2.@global[0].remote_dns_ipv6='https://dns.google/dns-query'
 #uci delete passwall2.GooglePlay
 #uci delete passwall2.Netflix
 #uci delete passwall2.OpenAI
-uci delete passwall2.China
+#uci delete passwall2.China
 #uci delete passwall2.QUIC
 #uci delete passwall2.Proxy
 #uci delete passwall2.UDP
 #uci delete passwall2.@global_subscribe[0].filter_discard_list
-uci delete passwall2.Russia_Block
-uci delete passwall2.Russia
+#uci delete passwall2.Russia_Block
+#uci delete passwall2.Russia
 
 #uci set passwall2.Direct=shunt_rules
 #uci set passwall2.Direct.network='tcp,udp'
