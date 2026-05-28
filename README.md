@@ -3,7 +3,8 @@ Automated configuration script for setting up Passwall2 on the Xiaomi AX3000T ru
 Also compatible with similar OpenWrt-supported hardware. Minimum hardware profile:
 - Flash `128MB`
 - RAM `256MB`
-  
+⚠ Openwrt V25: Consider flashing AX3200 with UBoot Layout to gain extra 15mb (85mb total). use set_t.sh to install without any preconfiguration!
+
 ## Installation
 ### Run from ssh
 ```bash
