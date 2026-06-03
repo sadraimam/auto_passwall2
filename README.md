@@ -5,13 +5,13 @@ Also compatible with similar OpenWrt-supported hardware. Minimum hardware profil
 - RAM `256MB`
 
 ## Installation
-⚠ Openwrt V25: Consider flashing AX3200 with UBoot Layout to gain extra 15mb (85mb total). use set_t.sh to install without any preconfiguration!
 ### Run from ssh
 ```bash
 rm -f /tmp/set.sh && wget -O /tmp/set.sh https://raw.githubusercontent.com/sadraimam/ax3000t/refs/heads/main/set.sh && chmod +x /tmp/set.sh && sh /tmp/set.sh
 ```
 ⚠ Manual Upgrade Required: Only Sing-box must be manually upgraded via the Passwall2 App Update page due to router storage limits; all other packages install automatically at their latest versions.
 
+### ⚠ Openwrt V25: Consider flashing AX3200 with UBoot Layout to gain extra 15mb (85mb total). use set_t.sh to install without any preconfiguration!
 ```bash
 rm -f /tmp/set.sh && wget -O /tmp/set.sh https://raw.githubusercontent.com/sadraimam/ax3000t/refs/heads/main/set_t.sh && chmod +x /tmp/set.sh && sh /tmp/set.sh
 ```
