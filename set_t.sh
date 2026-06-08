@@ -12,7 +12,7 @@ MIN_SPACE_KB=20480
 FEED_BASE_URL="https://master.dl.sourceforge.net/project/openwrt-passwall-build"
 FEED_NAMES="passwall_luci passwall_packages passwall2"
 #FEED_RUNTIME_PACKAGES="xray-core sing-box chinadns-ng hysteria geoview v2ray-geoip v2ray-geosite haproxy microsocks naiveproxy tcping"
-FEED_RUNTIME_PACKAGES="xray-core sing-box geoview v2ray-geoip v2ray-geosite microsocks tcping"
+FEED_RUNTIME_PACKAGES="xray-core sing-box geoview v2ray-geoip v2ray-geosite tcping"
 
 C_RESET='\033[0m'
 C_BOLD='\033[1m'
