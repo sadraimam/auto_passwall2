@@ -12,7 +12,7 @@ Minimum hardware profile:
 Run the following command via SSH to download and execute the interactive setup:
 
 ```bash
-rm -f /tmp/set_t.sh && wget -O /tmp/set_t.sh https://raw.githubusercontent.com/sadraimam/ax3000t/refs/heads/main/set_t.sh && chmod +x /tmp/set_t.sh && sh /tmp/set_t.sh
+rm -f /tmp/set.sh && wget -O /tmp/set.sh https://raw.githubusercontent.com/sadraimam/ax3000t/refs/heads/main/set.sh && chmod +x /tmp/set.sh && sh /tmp/set.sh
 ```
 
 ### Script Options (Flags)
@@ -29,10 +29,10 @@ The script accepts several optional arguments so you can customize the installat
 **Examples:**
 ```bash
 # Install latest from SourceForge feed with root/wifi setup and Iran configs
-sh /tmp/set_t.sh -rw -i
+sh /tmp/set.sh -rw -i
 
 # Clean install latest from GitHub releases
-sh /tmp/set_t.sh -g -c
+sh /tmp/set.sh -g -c
 ```
 
 ## Features
