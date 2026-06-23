@@ -1,45 +1,56 @@
 # OpenWrt Passwall2 Auto Configuration
-Automated configuration script for setting up Passwall2 on the Xiaomi AX3000T running OpenWrt.
-Also compatible with similar OpenWrt-supported hardware. Minimum hardware profile:
+
+Automated configuration script for setting up Passwall2 on the Xiaomi AX3000T and similar OpenWrt devices. 
+It supports both newer snapshot releases (`apk`) and traditional releases (`opkg`), resolving dependencies and configuring everything for you.
+
+Minimum hardware profile:
 - Flash `128MB`
 - RAM `256MB`
 
 ## Installation
-### Run from ssh
-```bash
-rm -f /tmp/set.sh && wget -O /tmp/set.sh https://raw.githubusercontent.com/sadraimam/ax3000t/refs/heads/main/set.sh && chmod +x /tmp/set.sh && sh /tmp/set.sh
-```
-⚠ Manual Upgrade Required: Only Sing-box must be manually upgraded via the Passwall2 App Update page due to router storage limits; all other packages install automatically at their latest versions.
 
-### ⚠ Openwrt V25: Consider flashing AX3200 with UBoot Layout to gain extra 15mb (85mb total). use set_t.sh to install without any preconfiguration!
+Run the following command via SSH to download and execute the interactive setup:
+
 ```bash
-rm -f /tmp/set.sh && wget -O /tmp/set.sh https://raw.githubusercontent.com/sadraimam/ax3000t/refs/heads/main/set_t.sh && chmod +x /tmp/set.sh && sh /tmp/set.sh
+rm -f /tmp/set_t.sh && wget -O /tmp/set_t.sh https://raw.githubusercontent.com/sadraimam/ax3000t/refs/heads/main/set_t.sh && chmod +x /tmp/set_t.sh && sh /tmp/set_t.sh
+```
+
+### Script Options (Flags)
+
+The script accepts several optional arguments so you can customize the installation:
+
+- `-g, --github [VER]` : Install from GitHub releases instead of SourceForge feeds. Optionally specify a version (e.g., `v2.0.1`).
+- `-c, --clean` : Perform a clean install (removes existing Passwall packages first).
+- `-l, --only-luci` : Install only the LuCI interface (skip binaries). Used with GitHub mode only.
+- `-rw, --root-wifi` : Interactive setup to configure a new Root password and WiFi password.
+- `-i, --iran` : Apply Iran-specific configurations (Timezone, Passwall banner patch, custom DNS, and DNS Rebind fixes).
+- `-h, --help` : Show help message.
+
+**Examples:**
+```bash
+# Install latest from SourceForge feed with root/wifi setup and Iran configs
+sh /tmp/set_t.sh -rw -i
+
+# Clean install latest from GitHub releases
+sh /tmp/set_t.sh -g -c
 ```
 
 ## Features
-- Advanced custom package installer using RAM with retry download logic and optional custom URL
-- Installs and configures Passwall2 with recommended defaults.
-- Sets up optimized DNS and network settings
-- Configures WiFi with secure defaults
-- Adds custom routing rules for Iranian networks
+- **Package Manager Agnostic:** Automatically uses `apk` or `opkg` depending on your OpenWrt version.
+- **Dual Source Installation:** Install from either the official SourceForge feeds or directly from GitHub releases.
+- **Dependency Management:** Automatically installs required kernels (`kmod-nft-tproxy`, etc.), swaps `dnsmasq` for `dnsmasq-full`, and ensures DNS resolves correctly during the swap.
+- **Interactive Configuration:** Set secure defaults for your WiFi and root password (`-rw`).
+- **Region Specific Fixes:** Dedicated Iran configuration flag (`-i`) to set `Asia/Tehran` timezone, add regional DNS, and fix DNS rebinding for local carrier portals (Irancell, MCI, TCI).
 
 ## Prerequisites
-- OpenWrt installed (non-SNAPSHOT version)
+- OpenWrt installed
 - Root access to the router
 - Working internet connection
 
 ## Default Settings
-- Default root & wifi password: 123456789 (Change after installation!)
-- Timezone: Asia/Tehran
-- DNS: Google DNS (8.8.4.4, 2001:4860:4860::8844)
-
-## Passwall2 Update Mechanism
-Passwall2 uses its own mechanism to update cores (Xray, Sing-box, and Hysteria). It calls the backend API to fetch package versions and determine whether an update is needed. The update process downloads the raw binary data and extracts/replaces the existing files. Note that it does not use the `opkg upgrade` command, which allows it to bypass storage limitations. In future versions of the script, we will mimic this behavior and use the Passwall2 API to automatically install the latest version of all cores.
+- Default root & wifi password: `123456789` (You will be prompted to change this if using `-rw`)
+- Timezone: `UTC` (Changes to `Asia/Tehran` if using `-i`)
+- DNS: Google DNS (`8.8.8.8`, `8.8.4.4`, `1.1.1.1`, `1.0.0.1`, etc.)
 
 ## Note on Storage
-On Xiaomi AX3000T, factory partitioning results in an overlay size of approximately 60 MB, compared to around 90-100 MB available on similar routers. The script is optimized to work with this limited storage space. To regain more free space, you would need to modify the factory partitioning via UART or directly flash the ROM chip (not recommended). If you modify the factory partitions, recovering the original firmware is only possible using these methods.
-
-## Future Plans (work in progress)
-- Add script call input parameter to skip options --wifi --rootpw --iran `set.sh`
-- Auto-update cores using Passwall2 API `app.sh`
-- Advanced DNS config for Iran Network `adv.sh`
+On the Xiaomi AX3000T, factory partitioning results in an overlay size of approximately 60 MB, compared to around 90-100 MB available on similar routers. The script is optimized to work with this limited storage space although its recommended to flash the router with a UBoot layout (e.g., OpenWrt V25 AX3200t layout) to gain more free storage space (You should get 85 MB total).
