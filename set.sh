@@ -11,8 +11,8 @@ MIN_SPACE_KB=20480
 
 FEED_BASE_URL="https://master.dl.sourceforge.net/project/openwrt-passwall-build"
 FEED_NAMES="passwall_luci passwall_packages passwall2"
-#FEED_RUNTIME_PACKAGES="xray-core sing-box chinadns-ng hysteria geoview v2ray-geoip v2ray-geosite haproxy microsocks naiveproxy tcping"
 FEED_RUNTIME_PACKAGES="xray-core sing-box geoview v2ray-geoip v2ray-geosite tcping"
+FEED_RUNTIME_PACKAGES_FULL="xray-core sing-box chinadns-ng hysteria geoview v2ray-geoip v2ray-geosite haproxy microsocks naiveproxy tcping"
 
 C_RESET='\033[0m'
 C_BOLD='\033[1m'
@@ -140,7 +140,7 @@ ensure_direct_resolver() {
         cp /tmp/resolv.conf /tmp/resolv.conf.passwall2.bak 2>/dev/null || true
         {
             grep '^search ' /tmp/resolv.conf 2>/dev/null
-            echo 'nameserver 9.9.9.9'
+            echo 'nameserver 8.8.8.8'
             echo 'nameserver 1.1.1.1'
         } > /tmp/resolv.conf
         if [ "$has_loopback" = true ]; then
@@ -583,6 +583,7 @@ show_help() {
     echo "  -g, --github [VER]  Install from GitHub releases. Optional version (e.g., v2.0.1)."
     echo "  -c, --clean         Clean install (remove old packages first)."
     echo "  -l, --only-luci     Install only LuCI interface (skip binaries). GitHub mode only."
+    echo "  -f, --full          Full feature install (includes chinadns-ng hysteria haproxy microsocks naiveproxy)."
     echo "  -rw, --root-wifi    Root and WiFi setup (interactive configuration)."
     echo "  -i, --iran          Apply Iran specific configurations."
     echo "  -h, --help          Show this help message."
@@ -603,6 +604,7 @@ ONLY_LUCI=false
 ALLOW_UNTRUSTED_FEEDS=false
 ROOT_WIFI=false
 IRAN_CONFIG=false
+FULL_FEATURE=false
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -617,12 +619,17 @@ while [ "$#" -gt 0 ]; do
             ;;
         -c|--clean) CLEAN_INSTALL=true; shift ;;
         -l|--only-luci) ONLY_LUCI=true; shift ;;
+        -f|--full) FULL_FEATURE=true; shift ;;
         -rw|--root-wifi) ROOT_WIFI=true; shift ;;
         -i|--iran) IRAN_CONFIG=true; shift ;;
         -*) msg err "Unknown option: $1" ;;
         *) msg err "Unknown argument: $1. Use --github flag to specify version." ;;
     esac
 done
+
+if [ "$FULL_FEATURE" = true ]; then
+    FEED_RUNTIME_PACKAGES="$FEED_RUNTIME_PACKAGES_FULL"
+fi
 
 msg head "System checks"
 

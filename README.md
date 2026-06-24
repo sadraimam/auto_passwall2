@@ -22,6 +22,7 @@ The script accepts several optional arguments so you can customize the installat
 - `-g, --github [VER]` : Install from GitHub releases instead of SourceForge feeds. Optionally specify a version (e.g., `v2.0.1`).
 - `-c, --clean` : Perform a clean install (removes existing Passwall packages first).
 - `-l, --only-luci` : Install only the LuCI interface (skip binaries). Used with GitHub mode only.
+- `-f, --full` : Full feature install (includes chinadns-ng, hysteria, haproxy, microsocks, naiveproxy).
 - `-rw, --root-wifi` : Interactive setup to configure a new Root password and WiFi password.
 - `-i, --iran` : Apply Iran-specific configurations (Timezone, Passwall banner patch, custom DNS, and DNS Rebind fixes).
 - `-h, --help` : Show help message.
@@ -53,4 +54,4 @@ sh /tmp/set.sh -g -c
 - DNS: Google DNS (`8.8.8.8`, `8.8.4.4`, `1.1.1.1`, `1.0.0.1`, etc.)
 
 ## Note on Storage
-On the Xiaomi AX3000T, factory partitioning results in an overlay size of approximately 60 MB, compared to around 90-100 MB available on similar routers. The script is optimized to work with this limited storage space although its recommended to flash the router with a UBoot layout (e.g., OpenWrt V25 AX3200t layout) to gain more free storage space (You should get 85 MB total).
+On the Xiaomi AX3000T, factory partitioning results in an overlay size of approximately 60 MB, compared to around 90-100 MB available on similar routers. The script is optimized to work with this limited storage space although its recommended to flash the router with a UBoot layout (e.g., OpenWrt V25 AX3000T UBoot layout) to gain more free storage space (You should get 85 MB total).
