@@ -1,6 +1,6 @@
 # OpenWrt Passwall2 Auto Configuration with optional Iran specific fixes
 
-Automated configuration script for setting up Passwall2 on the Xiaomi AX3000T and similar OpenWrt devices. 
+Automated configuration script for setting up Passwall2 on OpenWrt devices. 
 It supports both newer v25 releases (`apk`) and older releases (`opkg`), resolving dependencies and configuring everything.
 
 Minimum hardware profile:
@@ -53,5 +53,5 @@ sh /tmp/set.sh -g -c
 - Timezone: `UTC` (Changes to `Asia/Tehran` if using `-i`)
 - DNS: Google DNS (`8.8.8.8`, `8.8.4.4`, `1.1.1.1`, `1.0.0.1`, etc.)
 
-## Note on Storage
+## AX3000T note:
 On the Xiaomi AX3000T, factory partitioning results in an overlay size of approximately 60 MB, compared to around 90-100 MB available on similar routers. The script is optimized to work with this limited storage space although its recommended to flash the router with a UBoot layout (e.g., OpenWrt V25 AX3000T UBoot layout) to gain more free storage space (You should get 85 MB total).
