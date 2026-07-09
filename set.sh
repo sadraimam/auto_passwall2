@@ -506,19 +506,19 @@ apply_iran_config() {
     uci commit system
     /etc/init.d/sysntpd restart
     msg ok "Timezone set to Tehran."
-
+    
     msg info "Adding 5.200.200.200 to WAN DNS..."
     uci add_list network.wan.dns="5.200.200.200"
     uci commit network
     /sbin/reload_config >/dev/null
-    msg ok "Iran DNS configured."
-
+    msg ok "Iran DNS Configured."
+    
     msg info "Applying DNS Rebind Fix..."
     uci set dhcp.@dnsmasq[0].rebind_domain='my.irancell.ir my.mci.ir login.tci.ir local.tci.ir 192.168.1.1.mci 192.168.1.1.irancell'
     uci commit dhcp
     /etc/init.d/dnsmasq restart >/dev/null 2>&1 || true
     msg ok "DNS Rebind Fixed."
-
+    
     msg info "Patching Passwall Status Banner..."
     curl -s -L --fail -o /tmp/status.htm https://raw.githubusercontent.com/sadraimam/ax3000t/refs/heads/main/status.htm
     if [ -s /tmp/status.htm ]; then
@@ -529,7 +529,7 @@ apply_iran_config() {
         mkdir -p /lib/upgrade/keep.d/
         grep -q "/usr/lib/lua/luci/view/passwall2/global/status.htm" /lib/upgrade/keep.d/luci-app-passwall2 2>/dev/null || echo "/usr/lib/lua/luci/view/passwall2/global/status.htm" >> /lib/upgrade/keep.d/luci-app-passwall2
         rm -f /tmp/status.htm
-        msg ok "Passwall Status Banner Patched"
+        msg ok "Passwall Status Banner Patched."
     else
         msg err "Failed to download status banner patch."
     fi
@@ -538,38 +538,23 @@ apply_iran_config() {
 setup_root_wifi() {
     msg head "Root and WiFi Setup"
     
-    printf "${C_YELLOW}Enter new WiFi password (default: 123456789): ${C_RESET}"
-    read WIFI_PASS
-    WIFI_PASS=${WIFI_PASS:-123456789}
-
     uci set wireless.radio0.cell_density='0'
     uci set wireless.default_radio0.encryption='sae-mixed'
-    uci set wireless.default_radio0.key="$WIFI_PASS"
+    uci set wireless.default_radio0.key='123456789'
     uci set wireless.default_radio0.ocv='0'
     uci set wireless.radio0.disabled='0'
     uci set wireless.radio1.cell_density='0'
     uci set wireless.default_radio1.encryption='sae-mixed'
-    uci set wireless.default_radio1.key="$WIFI_PASS"
+    uci set wireless.default_radio1.key='123456789'
     uci set wireless.default_radio1.ocv='0'
     uci set wireless.radio1.disabled='0'
     uci commit wireless
     wifi reload
     msg ok "Wifi Configured"
+    msg warn "Wifi password is set: 123456789"
 
-    printf "${C_YELLOW}Enter new root password (default: 123456789): ${C_RESET}"
-    read ROOT_PASS
-    ROOT_PASS=${ROOT_PASS:-123456789}
-    (echo "$ROOT_PASS"; echo "$ROOT_PASS") | passwd root >/dev/null 2>&1
-    if [ $? -ne 0 ]; then
-        if [ "$ROOT_PASS" = "123456789" ]; then
-            sed -i '/^root:/s|:[^:]*|:$5$S5bxda0buJo3RfO4$soovbPY4JGEbfMmggEPdo9mW/1qkTaAgVn9bbAfJeD7|' /etc/shadow
-            msg ok "Root password is set to default via fallback"
-        else
-            msg err "Failed to set custom root password."
-        fi
-    else
-        msg ok "Root password is set"
-    fi
+    (echo "123456789"; echo "123456789") | passwd root >/dev/null 2>&1 || sed -i '/^root:/s|:[^:]*|:$5$S5bxda0buJo3RfO4$soovbPY4JGEbfMmggEPdo9mW/1qkTaAgVn9bbAfJeD7|' /etc/shadow
+    msg warn "Root password is set: 123456789"
 }
 
 show_help() {
@@ -1033,16 +1018,16 @@ while true; do
     read -rsn1 input
     case "$input" in
         r|R)
-            echo -e "${GREEN}\nRebooting system...${NC}"
+            msg ok "\nRebooting system..."
             reboot
             exit 0
             ;;
         e|E)
-            echo -e "${RED}\nExiting script.${NC}"
+            msg warn "\nExiting script."
             exit 0
             ;;
         *)
-            echo -e "${RED}\nInvalid choice! Press 'r' or 'e'.${NC}"
+            msg err "\nInvalid choice! Press 'r' or 'e'"
             sleep 1
             ;;
     esac
