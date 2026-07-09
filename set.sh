@@ -1027,21 +1027,22 @@ fi
 msg ok "Installation completed"
 rm -f "$0"
 
+# Reboot or Exit
 while true; do
-    printf "${C_YELLOW}Press [r] to reboot or [e] to exit: ${C_RESET}"
-    read -r input
+    printf "${YELLOW}Press [r] to reboot or [e] to exit: ${NC}"
+    read -rsn1 input
     case "$input" in
         r|R)
-            echo -e "${C_GREEN}\nRebooting system...${C_RESET}"
+            echo -e "${GREEN}\nRebooting system...${NC}"
             reboot
             exit 0
             ;;
         e|E)
-            echo -e "${C_RED}\nExiting script.${C_RESET}"
+            echo -e "${RED}\nExiting script.${NC}"
             exit 0
             ;;
         *)
-            echo -e "${C_RED}\nInvalid choice! Press 'r' or 'e'.${C_RESET}"
+            echo -e "${RED}\nInvalid choice! Press 'r' or 'e'.${NC}"
             sleep 1
             ;;
     esac
