@@ -1,6 +1,6 @@
 # 🚀 OpenWrt Passwall2 Auto-Configuration Suite
 
-🌐 **Languages:** [English](README.md) | [فارسی](README_fa.md)
+🌐 **Languages:** [English](README.md) | [فارسی](README_fa.md) | [Русский](README_ru.md) | [简体中文](README_zh.md)
 
 Automated, resilient, and feature-rich setup script for installing and configuring **Passwall2** on OpenWrt routers.
 

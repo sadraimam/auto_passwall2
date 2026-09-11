@@ -2,7 +2,7 @@
 
 # 🚀 OpenWrt Passwall2 Auto-Configuration Suite
 
-🌐 **زبان‌ها:** [English](README.md) | [فارسی](README_fa.md)
+🌐 **زبان‌ها:** [English](README.md) | [فارسی](README_fa.md) | [Русский](README_ru.md) | [简体中文](README_zh.md)
 
 اسکریپت خودکار، مقاوم و پرامکانات برای نصب و پیکربندی **Passwall2** روی روترهای OpenWrt.
 
