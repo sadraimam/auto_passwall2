@@ -16,9 +16,10 @@
 | :--- | :--- |
 | ⚡ **Package Manager Agnostic** | پشتیبانی کامل از نسخه‌های جدید OpenWrt (`apk` در OpenWrt 24.10 / 25+) و نسخه‌های قدیمی‌تر (`opkg`) و نصب شفاف پکیج‌های `.apk` و `.ipk`. |
 | 🌐 **Triple-Source Engine** | امکان نصب از مخازن رسمی SourceForge (پیش‌فرض)، دانلود مستقیم از **GitHub Releases** (`-g`)، یا **میرور ایرانی GitHub** (`-gm`) از طریق `scorpian.ir`. |
-| 📦 **Customizable Profiles** | امکان انتخاب پروفایل‌های نصب **Standard**، **Full Feature** (`-f`)، **Minimal Sing-Box** (`-s`)، یا **LuCI UI Only** (`-l`) متناسب با حجم حافظه روتر. |
+| 📦 **Customizable Profiles** | امکان انتخاب پروفایل‌های نصب **Standard** (هردو هسته Xray و Sing-Box)، **Full Feature** (`-f`)، **Minimal Xray** (`-x`)، **Minimal Sing-Box** (`-s`)، یا **LuCI UI Only** (`-l`) متناسب با حجم حافظه روتر. |
+| 🛡️ **Resilient Core Fallback & Mirror Support** | تضمین نصب خودکار هسته‌های پروکسی حتی پس از حذف آن‌ها در آرشیوهای جدید Passwall2. در حالت میرور ایران (`-gm`)، هسته‌ها مستقیماً و با حداکثر سرعت از میرور اختصاصی ایران (`scorpian.ir/repos/XTLS/Xray-core` و `scorpian.ir/repos/sagernet/sing-box`) دانلود می‌شوند و در صورت نیاز به نسخه‌های رسمی گیت‌هاب فال‌بک می‌کنند. |
 | 🛠️ **Zero-Downtime Swap** | ارتقای امن `dnsmasq` به `dnsmasq-full` و نصب kernel moduleهای لازم (`kmod-nft-tproxy`, `kmod-nft-socket`) بدون قطعی اینترنت با استفاده از fallback resolverها. |
-| 🇮🇷 **Iran Regional Fixes** | سوییچ اختصاصی (`-i`) جهت تنظیم timezone به `Asia/Tehran`، تنظیم WAN DNS به `5.200.200.200`، حل مشکل DNS Rebinding پورتال اپراتورها (*Irancell, MCI, TCI*) و پچ کردن بنر استاتوس Passwall. |
+| 🇮🇷 **Iran Regional Fixes** | سوییچ اختصاصی (`-i`) جهت مقداردهی اولیه فوری DNS داخلی (`5.200.200.200`) در شروع اسکریپت برای عبور از اختلالات شدید DNS، تنظیم timezone به `Asia/Tehran`، حل مشکل DNS Rebinding پورتال اپراتورها (*Irancell, MCI, TCI*) و پچ کردن بنر استاتوس Passwall. |
 | 🔑 **Emergency Password Reset** | بازپیکربندی دکمه ریست سخت‌افزاری (`-rb`) جهت پاک کردن پسورد root SSH با نگه داشتن ۵ ثانیه‌ای دکمه بدون پاک شدن تنظیمات روتر. |
 | 📶 **Default Passwords Setup** | تنظیم سریع پسورد Wi-Fi (باند 2.4GHz و 5GHz) و پسورد root SSH به `123456789` (`-rw`). |
 
@@ -29,7 +30,7 @@
 اسکریپت نصب خودکار را از طریق SSH روی روتر OpenWrt خود اجرا کنید:
 
 ```bash
-rm -f /tmp/set.sh && wget -O /tmp/set.sh https://raw.githubusercontent.com/sadraimam/ax3000t/refs/heads/main/set.sh && chmod +x /tmp/set.sh && sh /tmp/set.sh
+rm -f /tmp/set.sh && wget -O /tmp/set.sh https://raw.githubusercontent.com/sadraimam/auto_passwall2/refs/heads/main/set.sh && chmod +x /tmp/set.sh && sh /tmp/set.sh
 ```
 
 ---
@@ -40,13 +41,14 @@ rm -f /tmp/set.sh && wget -O /tmp/set.sh https://raw.githubusercontent.com/sadra
 
 | Flag | Long Option | توضیح |
 | :--- | :--- | :--- |
-| `-g [VER]` | `--github [VER]` | نصب مستقیم از GitHub Releases به جای سورس‌های SourceForge. قابلیت تعیین release tag مشخص (مانند `v2.0.1` یا `26.8.17-1`). |
+| `-g [VER]` | `--github [VER]` | نصب مستقیم از GitHub Releases به جای سورس‌های SourceForge. قابلیت تعیین release tag مشخص (مانند `26.8.17-1`). |
 | `-gm [VER]` | `--github-mirror [VER]` | نصب از **میرور ایرانی GitHub** (`scorpian.ir`). دور زدن GitHub rate-limiting، DNS pollution و اختلالات ISP در ایران. نام مستعار: `-m`. |
 | `-c` | `--clean` | اجرای Clean Installation. پاکسازی پکیج‌های قبلی Passwall2 و binaryهای اجرا شده قبل از نصب جهت جلوگیری از تداخل. |
-| `-s` | `--singbox` | نصب Minimal فقط با هسته **sing-box** (صرفه‌جویی در فضا). به طور خودکار حالت دانلود از GitHub/Mirror را فعال می‌کند. |
+| `-x` | `--xray` | نصب Minimal فقط با هسته **xray-core** (صرفه‌جویی در فضای فلش با حذف sing-box و باینری‌های اضافی). |
+| `-s` | `--singbox` | نصب Minimal فقط با هسته **sing-box** (صرفه‌جویی در فضای فلش با حذف xray-core و باینری‌های اضافی). |
 | `-f` | `--full` | نصب Full Feature. شامل تمام proxy coreها و ابزارها: `chinadns-ng`, `hysteria`, `haproxy`, `microsocks`, `naiveproxy`, `xray-core`, `sing-box`, `geoview`, `v2ray-geoip`, `v2ray-geosite`, `tcping`. |
 | `-l` | `--only-luci` | نصب فقط LuCI web interface (`luci-app-passwall2`). بدون دانلود پکیج‌های binary (مفید در صورتی که coreهای سفارشی در فیرمور بیلد شده باشند). |
-| `-i` | `--iran` | اعمال بهینه‌سازی‌های ایران: تنظیم timezone به `Asia/Tehran`، افزودن WAN DNS به `5.200.200.200`، حل مشکل DNS Rebinding پورتال اپراتورها (`my.irancell.ir`, `my.mci.ir`, `login.tci.ir`) و پچ کردن بنر استاتوس Passwall. |
+| `-i` | `--iran` | اعمال بهینه‌سازی‌های ایران: تنظیم فوری DNS محلی `5.200.200.200` در ابتدای اسکریپت، تنظیم timezone به `Asia/Tehran`، حل مشکل DNS Rebinding پورتال اپراتورها (`my.irancell.ir`, `my.mci.ir`, `login.tci.ir`) و پچ کردن بنر استاتوس Passwall. |
 | `-rw` | `--root-wifi` | تنظیم پسورد root SSH و وای‌فای 2.4GHz/5GHz به `123456789`. |
 | `-rb` | `--reset-button` | بازپیکربندی دکمه ریست سخت‌افزاری: فشردن ۱ ثانیه‌ای برای reboot روتر؛ فشردن ۵ ثانیه‌ای برای پاک کردن پسورد root (`passwd -d root`). |
 | `-h` | `--help` | نمایش help و راهنمای سوییچ‌های اسکریپت. |
@@ -61,25 +63,31 @@ rm -f /tmp/set.sh && wget -O /tmp/set.sh https://raw.githubusercontent.com/sadra
 sh /tmp/set.sh -gm -c -rw -i
 ```
 
-### 2. Clean Install از GitHub Releases رسمی
-دانلود مستقیم آخرین release binaryها از GitHub و اجرای clean reinstall:
+### 2. Clean Install از GitHub Releases رسمی (هردو هسته)
+دانلود مستقیم آخرین release binaryها از GitHub و اطمینان از نصب هردو هسته Xray و Sing-box:
 ```bash
 sh /tmp/set.sh -g -c
 ```
 
-### 3. نصب یک Release Version مشخص
+### 3. نصب Minimal فقط با Xray (حداکثر صرفه‌جویی در فضا)
+نصب فقط هسته `xray-core` و geo-databaseهای لازم جهت باقی ماندن حداکثر فضای خالی روی پارتیشن overlay:
+```bash
+sh /tmp/set.sh -x -c
+```
+
+### 4. نصب Minimal فقط با Sing-Box
+نصب فقط هسته `sing-box` و geo-databaseهای لازم:
+```bash
+sh /tmp/set.sh -s -c
+```
+
+### 5. نصب یک Release Version مشخص
 نصب یک نسخه خاص (مثلاً `26.8.17-1`) از طریق میرور ایران:
 ```bash
 sh /tmp/set.sh -gm 26.8.17-1 -c
 ```
 
-### 4. Minimal Sing-Box Install (مناسب روترهای با فضای ذخیره‌سازی محدود)
-نصب فقط هسته `sing-box` و geo-databaseهای لازم جهت باقی ماندن حداکثر فضای خالی روی پارتیشن overlay:
-```bash
-sh /tmp/set.sh -s -c
-```
-
-### 5. Full Feature Stack Installation
+### 6. Full Feature Stack Installation
 نصب تمامی هسته‌ها و ابزارهای پشتیبانی‌شده (Hysteria, NaiveProxy, HAProxy, ChinaDNS-NG و ...):
 ```bash
 sh /tmp/set.sh -f -c
@@ -97,7 +105,7 @@ sh /tmp/set.sh -f -c
 
 > [!NOTE]
 > **Xiaomi AX3000T & دستگاه‌های با حافظه محدود:**
-> پارتیشن‌بندی فابریک Xiaomi AX3000T فضایی حدود 60 MB برای overlay فراهم می‌کند. این اسکریپت برای اجرا در این فضا بهینه‌سازی شده است. برای بهترین نتیجه، از حالت minimal sing-box (`-s`) استفاده کنید یا با فلش UBoot سفارشی، فضای overlay را به حدود 85 MB افزایش دهید.
+> پارتیشن‌بندی فابریک Xiaomi AX3000T فضایی حدود 60 MB برای overlay فراهم می‌کند. این اسکریپت برای اجرا در این فضا بهینه‌سازی شده است. برای بهترین نتیجه، از حالت minimal sing-box (`-s`) یا minimal xray (`-x`) استفاده کنید یا با فلش UBoot سفارشی، فضای overlay را به حدود 85 MB افزایش دهید.
 
 ---
 
@@ -114,5 +122,6 @@ sh /tmp/set.sh -f -c
 - **Script Maintainer:** [sadraimam](https://github.com/sadraimam)
 - **Passwall2 Upstream Project:** [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2)
 - **Iranian Mirror Provider:** [scorpian.ir](https://scorpian.ir/repos/Openwrt-Passwall/openwrt-passwall2)
+- **Thanks to:** [enxy0](https://github.com/enxy0/passwall2_install)
 
 </div>

@@ -6,6 +6,10 @@ REPO_URL="https://api.github.com/repos/Openwrt-Passwall/openwrt-passwall2/releas
 BASE_DOWNLOAD_URL="https://github.com/Openwrt-Passwall/openwrt-passwall2/releases/download"
 MIRROR_API_URL="https://scorpian.ir/api/repos/Openwrt-Passwall/openwrt-passwall2/releases"
 MIRROR_ASSET_BASE_URL="https://scorpian.ir/proxy/asset/Openwrt-Passwall/openwrt-passwall2"
+MIRROR_XRAY_API_URL="https://scorpian.ir/api/repos/XTLS/Xray-core/releases"
+MIRROR_XRAY_ASSET_BASE_URL="https://scorpian.ir/proxy/asset/XTLS/Xray-core"
+MIRROR_SINGBOX_API_URL="https://scorpian.ir/api/repos/sagernet/sing-box/releases"
+MIRROR_SINGBOX_ASSET_BASE_URL="https://scorpian.ir/proxy/asset/sagernet/sing-box"
 TEMP_DIR="/tmp/passwall2_update"
 CONFIG_DIR="/etc/config"
 BACKUP_SUFFIX=$(date +%Y%m%d)
@@ -143,15 +147,20 @@ ensure_direct_resolver() {
     if [ "$has_direct" = false ]; then
         cp /tmp/resolv.conf /tmp/resolv.conf.passwall2.bak 2>/dev/null || true
         {
-            grep '^search ' /tmp/resolv.conf 2>/dev/null
+            grep '^search ' /tmp/resolv.conf 2>/dev/null            
             echo 'nameserver 8.8.8.8'
             echo 'nameserver 1.1.1.1'
+            if [ "$IRAN_CONFIG" = true ]; then
+                echo 'nameserver 5.200.200.200'
+            fi
         } > /tmp/resolv.conf
         if [ "$has_loopback" = true ]; then
             msg warn "Using temporary direct resolvers while replacing dnsmasq"
         else
             msg warn "Using temporary direct resolvers because no system resolver is configured"
         fi
+    elif [ "$IRAN_CONFIG" = true ] && ! grep -q 'nameserver 5.200.200.200' /tmp/resolv.conf 2>/dev/null; then
+        sed -i '1inameserver 5.200.200.200' /tmp/resolv.conf 2>/dev/null || true
     fi
 }
 
@@ -204,7 +213,11 @@ ensure_feed_packages_available() {
     local missing=""
     local package=""
 
-    for package in luci-app-passwall2 $FEED_RUNTIME_PACKAGES; do
+    if ! pkg_available luci-app-passwall2; then
+        msg err "Required package luci-app-passwall2 is unavailable in feeds. Use --github or retry after feed refresh works."
+    fi
+
+    for package in $FEED_RUNTIME_PACKAGES; do
         if ! pkg_available "$package"; then
             missing="$missing $package"
         fi
@@ -212,7 +225,7 @@ ensure_feed_packages_available() {
 
     missing=$(echo "$missing" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
     if [ -n "$missing" ]; then
-        msg err "Required feed packages are unavailable: $missing. Use --github or retry after feed refresh works."
+        msg warn "Some feed packages are unavailable: $missing. Any missing cores will be resolved via fallback."
     fi
 }
 
@@ -484,6 +497,9 @@ initialize_network() {
     uci add_list network.wan.dns="8.8.8.8"
     uci add_list network.wan.dns="1.0.0.1"
     uci add_list network.wan.dns="1.1.1.1"
+    if [ "$IRAN_CONFIG" = true ]; then
+        uci add_list network.wan.dns="5.200.200.200"
+    fi
     uci del network.wan6.dns 2>/dev/null
     uci set network.wan6.peerdns="0"
     uci add_list network.wan6.dns="2001:4860:4860::8844"
@@ -492,7 +508,12 @@ initialize_network() {
     uci add_list network.wan6.dns="2606:4700:4700::1111"
     uci commit network
     /sbin/reload_config >/dev/null 
-    msg ok "Network Initialized!"
+    if [ "$IRAN_CONFIG" = true ]; then
+        [ -f /tmp/resolv.conf ] && sed -i '1inameserver 5.200.200.200' /tmp/resolv.conf 2>/dev/null || true
+        msg ok "Network Initialized with local Iran DNS (5.200.200.200)!"
+    else
+        msg ok "Network Initialized!"
+    fi
 }
 
 initialize_time_date() {
@@ -511,11 +532,15 @@ apply_iran_config() {
     /etc/init.d/sysntpd restart
     msg ok "Timezone set to Tehran."
     
-    msg info "Adding 5.200.200.200 to WAN DNS..."
-    uci add_list network.wan.dns="5.200.200.200"
-    uci commit network
-    /sbin/reload_config >/dev/null
-    msg ok "Iran DNS Configured."
+    if ! uci get network.wan.dns 2>/dev/null | grep -q '5.200.200.200'; then
+        msg info "Adding 5.200.200.200 to WAN DNS..."
+        uci add_list network.wan.dns="5.200.200.200"
+        uci commit network
+        /sbin/reload_config >/dev/null
+        msg ok "Iran DNS Configured."
+    else
+        msg ok "Iran DNS (5.200.200.200) already active in WAN."
+    fi
     
     msg info "Applying DNS Rebind Fix..."
     uci set dhcp.@dnsmasq[0].rebind_domain='my.irancell.ir my.mci.ir login.tci.ir local.tci.ir 192.168.1.1.mci 192.168.1.1.irancell'
@@ -524,7 +549,7 @@ apply_iran_config() {
     msg ok "DNS Rebind Fixed."
     
     msg info "Patching Passwall Status Banner..."
-    curl -s -L --fail -o /tmp/status.htm https://raw.githubusercontent.com/sadraimam/ax3000t/refs/heads/main/status.htm
+    curl -s -L --fail -o /tmp/status.htm https://raw.githubusercontent.com/sadraimam/auto_passwall2/refs/heads/main/status.htm
     if [ -s /tmp/status.htm ]; then
         mkdir -p /usr/lib/lua/luci/view/passwall2/global/
         mkdir -p /usr/lib64/lua/luci/view/passwall2/global/
@@ -606,16 +631,21 @@ show_help() {
     echo "  -l, --only-luci            Install only LuCI interface (skip binaries)."
     echo "  -f, --full                 Full feature install (includes chinadns-ng hysteria haproxy microsocks naiveproxy)."
     echo "  -s, --singbox              Minimal install with only sing-box core (no extra cores or features)."
-    echo "  -rw, --root-wifi           Root and WiFi setup (sets passwords to 123456789)."
+    echo "  -x, --xray                 Minimal install with only xray core (no extra cores or features)."
     echo "  -i, --iran                 Apply Iran specific configurations."
+    echo "  -rw, --root-wifi           Root and WiFi setup (sets passwords to 123456789)."
     echo "  -rb, --reset-button        Modify reset button to clear root password (5s press) instead of factory reset."
     echo "  -h, --help                 Show this help message."
     echo ""
     echo "Examples:"
-    echo "  $0                         Install latest from SourceForge feed (default)"
+    echo "  $0                         Install latest from SourceForge feed with both cores (default)"
+    echo "  $0 -x                      Install latest from SourceForge feed with xray core only"
+    echo "  $0 -s                      Install latest from SourceForge feed with sing-box core only"
     echo "  $0 -g                      Install latest from GitHub"
+    echo "  $0 -g -x                   Install latest from GitHub with xray core only"
     echo "  $0 -gm                     Install latest from Iranian GitHub mirror (scorpian.ir)"
-    echo "  $0 -g v2.0.1               Install specific version from GitHub"
+    echo "  $0 -gm -x                  Install latest from Iranian GitHub mirror with xray core only"
+    echo "  $0 -g 26.8.17-1            Install specific version from GitHub"
     echo "  $0 -g -c                   Clean install from GitHub (latest)"
     echo "  $0 -gm -c                  Clean install from Iranian GitHub mirror (latest)"
     echo ""
@@ -632,6 +662,7 @@ ROOT_WIFI=false
 IRAN_CONFIG=false
 FULL_FEATURE=false
 SINGBOX_ONLY=false
+XRAY_ONLY=false
 MOD_RESET_BTN=false
 
 while [ "$#" -gt 0 ]; do
@@ -657,6 +688,7 @@ while [ "$#" -gt 0 ]; do
         -l|--only-luci) ONLY_LUCI=true; shift ;;
         -f|--full) FULL_FEATURE=true; shift ;;
         -s|--singbox) SINGBOX_ONLY=true; shift ;;
+        -x|--xray) XRAY_ONLY=true; shift ;;
         -rw|--root-wifi) ROOT_WIFI=true; shift ;;
         -i|--iran) IRAN_CONFIG=true; shift ;;
         -rb|--reset-button) MOD_RESET_BTN=true; shift ;;
@@ -665,39 +697,54 @@ while [ "$#" -gt 0 ]; do
     esac
 done
 
-if [ "$FULL_FEATURE" = true ] && [ "$SINGBOX_ONLY" = true ]; then
-    echo -e "${C_RED}[ERROR]${C_RESET} Options --full and --singbox cannot be used together."
+count_profiles=0
+[ "$FULL_FEATURE" = true ] && count_profiles=$((count_profiles + 1))
+[ "$SINGBOX_ONLY" = true ] && count_profiles=$((count_profiles + 1))
+[ "$XRAY_ONLY" = true ] && count_profiles=$((count_profiles + 1))
+
+if [ "$count_profiles" -gt 1 ]; then
+    echo -e "${C_RED}[ERROR]${C_RESET} Options --full, --singbox, and --xray cannot be used together."
     while true; do
-        printf "${C_YELLOW}Do you want (f)ull feature or (s)ingbox only? [f/s]: ${C_RESET}"
+        printf "${C_YELLOW}Choose installation profile: (f)ull feature, (s)ingbox only, or (x)ray only? [f/s/x]: ${C_RESET}"
         read -rsn1 input
         echo
         case "$input" in
             f|F)
+                FULL_FEATURE=true
                 SINGBOX_ONLY=false
+                XRAY_ONLY=false
                 msg info "Proceeding with Full Feature installation."
                 break
                 ;;
             s|S)
                 FULL_FEATURE=false
+                SINGBOX_ONLY=true
+                XRAY_ONLY=false
                 msg info "Proceeding with minimal Sing-box installation."
                 break
                 ;;
+            x|X)
+                FULL_FEATURE=false
+                SINGBOX_ONLY=false
+                XRAY_ONLY=true
+                msg info "Proceeding with minimal Xray installation."
+                break
+                ;;
             *)
-                msg warn "Invalid choice! Press 'f' or 's'"
+                msg warn "Invalid choice! Press 'f', 's', or 'x'"
                 ;;
         esac
     done
 fi
 
-if [ "$SINGBOX_ONLY" = true ]; then
-    if [ "$MIRROR_MODE" = false ]; then
-        GITHUB_MODE=true
-        msg info "Minimal Sing-box mode selected. Forcing GitHub installation to avoid dependency conflicts."
-    else
-        msg info "Minimal Sing-box mode selected with Iranian GitHub mirror."
-    fi
-elif [ "$FULL_FEATURE" = true ]; then
+if [ "$FULL_FEATURE" = true ]; then
     FEED_RUNTIME_PACKAGES="$FEED_RUNTIME_PACKAGES_FULL"
+elif [ "$XRAY_ONLY" = true ]; then
+    FEED_RUNTIME_PACKAGES="xray-core geoview v2ray-geoip v2ray-geosite tcping"
+elif [ "$SINGBOX_ONLY" = true ]; then
+    FEED_RUNTIME_PACKAGES="sing-box geoview v2ray-geoip v2ray-geosite tcping"
+else
+    FEED_RUNTIME_PACKAGES="xray-core sing-box geoview v2ray-geoip v2ray-geosite tcping"
 fi
 
 msg head "System checks"
@@ -710,7 +757,7 @@ msg ok "Package manager: ${C_BOLD}$PACKAGE_MANAGER${C_RESET}"
 initialize_network
 
 msg info "Checking connectivity"
-if ping -c 1 -W 5 8.8.8.8 >/dev/null 2>&1; then
+if ping -c 1 -W 5 8.8.8.8 >/dev/null 2>&1 || ping -c 1 -W 5 1.1.1.1 >/dev/null 2>&1 || ping -c 1 -W 5 5.200.200.200 >/dev/null 2>&1; then
     msg ok "Connectivity confirmed"
 else
     msg err "No internet connection"
@@ -775,6 +822,275 @@ for config_file in "$CONFIG_DIR"/passwall2*; do
     cp "$config_file" "$BACKUP_FILE"
     msg ok "Backed up config: $BACKUP_FILE"
 done
+
+get_xray_arch() {
+    case "$ARCH" in
+        x86_64) echo "64" ;;
+        *i386*|*i486*|*i686*) echo "32" ;;
+        aarch64*) echo "arm64-v8a" ;;
+        arm_cortex-a7*|arm_cortex-a15*|arm_cortex-a9*|arm*v7*) echo "arm32-v7a" ;;
+        arm*) echo "arm32-v5" ;;
+        mipsel*) echo "mips32le" ;;
+        mips*) echo "mips32" ;;
+        riscv64*) echo "riscv64" ;;
+        *) echo "" ;;
+    esac
+}
+
+get_singbox_arch() {
+    case "$ARCH" in
+        x86_64) echo "amd64" ;;
+        *i386*|*i486*|*i686*) echo "386" ;;
+        aarch64*) echo "arm64" ;;
+        arm_cortex-a7*|arm_cortex-a15*|arm_cortex-a9*|arm*v7*) echo "armv7" ;;
+        mipsel*) echo "mipsle" ;;
+        mips*) echo "mips" ;;
+        riscv64*) echo "riscv64" ;;
+        *) echo "" ;;
+    esac
+}
+
+install_xray_from_github() {
+    local xray_arch
+    xray_arch=$(get_xray_arch)
+    if [ -z "$xray_arch" ]; then
+        msg warn "Unsupported architecture for official Xray binary: $ARCH"
+        return 1
+    fi
+
+    local zip_name="Xray-linux-${xray_arch}.zip"
+    local tmp_zip="/tmp/${zip_name}"
+
+    # Tier A: Try Iranian GitHub mirror (scorpian.ir) if in mirror mode
+    if [ "$MIRROR_MODE" = true ]; then
+        msg info "Attempting to install xray-core from Iranian mirror (scorpian.ir)..."
+        local xray_meta="/tmp/passwall2-xray-mirror.json"
+        if curl -s -L --fail --connect-timeout 15 "$MIRROR_XRAY_API_URL" > "$xray_meta" 2>/dev/null && [ -s "$xray_meta" ]; then
+            local asset_id=""
+            if command_exists jsonfilter; then
+                asset_id=$(jsonfilter -i "$xray_meta" -e "@.releases[0].assets[@.name='$zip_name'].id" 2>/dev/null)
+            fi
+            if [ -z "$asset_id" ]; then
+                local xobj
+                xobj=$(grep -o '{"url"[^}]*"name":"'"$zip_name"'"[^}]*}' "$xray_meta" | head -n 1)
+                asset_id=$(echo "$xobj" | grep -o '"id":[0-9]*' | head -n 1 | cut -d: -f2)
+            fi
+            rm -f "$xray_meta" 2>/dev/null
+
+            if [ -n "$asset_id" ]; then
+                local mirror_url="${MIRROR_XRAY_ASSET_BASE_URL}/${asset_id}"
+                msg info "Downloading ${zip_name} from mirror (asset ID: ${asset_id})..."
+                if download_file "$mirror_url" "$tmp_zip" && [ -s "$tmp_zip" ]; then
+                    mkdir -p /tmp/xray_extract
+                    unzip -q -o "$tmp_zip" -d /tmp/xray_extract/ 2>/dev/null
+                    if [ -f /tmp/xray_extract/xray ]; then
+                        cp -f /tmp/xray_extract/xray /usr/bin/xray
+                        chmod +x /usr/bin/xray
+                        mkdir -p /usr/share/v2ray /usr/share/xray 2>/dev/null
+                        [ -f /tmp/xray_extract/geoip.dat ] && cp -f /tmp/xray_extract/geoip.dat /usr/share/v2ray/ 2>/dev/null && cp -f /tmp/xray_extract/geoip.dat /usr/share/xray/ 2>/dev/null
+                        [ -f /tmp/xray_extract/geosite.dat ] && cp -f /tmp/xray_extract/geosite.dat /usr/share/v2ray/ 2>/dev/null && cp -f /tmp/xray_extract/geosite.dat /usr/share/xray/ 2>/dev/null
+                    fi
+                    rm -rf /tmp/xray_extract "$tmp_zip" 2>/dev/null
+                    if [ -x /usr/bin/xray ]; then
+                        msg ok "xray-core binary installed successfully from mirror: /usr/bin/xray"
+                        return 0
+                    fi
+                fi
+                rm -f "$tmp_zip" 2>/dev/null
+                msg warn "Mirror download for xray-core failed. Falling back to GitHub..."
+            fi
+        else
+            rm -f "$xray_meta" 2>/dev/null
+            msg warn "Failed to fetch xray-core metadata from mirror. Falling back to GitHub..."
+        fi
+    fi
+
+    # Tier B: Official GitHub release (direct / ghfast / ghproxy)
+    msg info "Attempting to install xray-core from official GitHub release..."
+    local tag
+    tag=$(curl -s --fail https://api.github.com/repos/XTLS/Xray-core/releases/latest 2>/dev/null | jsonfilter -e '@.tag_name' 2>/dev/null)
+    if [ -z "$tag" ]; then
+        tag=$(curl -s -I https://github.com/XTLS/Xray-core/releases/latest 2>/dev/null | grep -i '^location:' | sed 's/.*tag\///' | tr -d '\r\n')
+    fi
+    [ -n "$tag" ] || tag="v25.2.21"
+
+    local dl_url="https://github.com/XTLS/Xray-core/releases/download/${tag}/${zip_name}"
+
+    msg info "Downloading ${zip_name} (${tag})..."
+    if download_file "$dl_url" "$tmp_zip" || \
+       download_file "https://ghfast.top/${dl_url}" "$tmp_zip" || \
+       download_file "https://ghproxy.net/${dl_url}" "$tmp_zip"; then
+        if [ -s "$tmp_zip" ]; then
+            mkdir -p /tmp/xray_extract
+            unzip -q -o "$tmp_zip" -d /tmp/xray_extract/ 2>/dev/null
+            if [ -f /tmp/xray_extract/xray ]; then
+                cp -f /tmp/xray_extract/xray /usr/bin/xray
+                chmod +x /usr/bin/xray
+                mkdir -p /usr/share/v2ray /usr/share/xray 2>/dev/null
+                [ -f /tmp/xray_extract/geoip.dat ] && cp -f /tmp/xray_extract/geoip.dat /usr/share/v2ray/ 2>/dev/null && cp -f /tmp/xray_extract/geoip.dat /usr/share/xray/ 2>/dev/null
+                [ -f /tmp/xray_extract/geosite.dat ] && cp -f /tmp/xray_extract/geosite.dat /usr/share/v2ray/ 2>/dev/null && cp -f /tmp/xray_extract/geosite.dat /usr/share/xray/ 2>/dev/null
+            fi
+            rm -rf /tmp/xray_extract "$tmp_zip" 2>/dev/null
+            if [ -x /usr/bin/xray ]; then
+                msg ok "xray-core binary installed successfully: /usr/bin/xray"
+                return 0
+            fi
+        fi
+    fi
+
+    rm -rf /tmp/xray_extract "$tmp_zip" 2>/dev/null
+    msg warn "Failed to install official xray-core binary from GitHub"
+    return 1
+}
+
+install_singbox_from_github() {
+    local sb_arch
+    sb_arch=$(get_singbox_arch)
+    if [ -z "$sb_arch" ]; then
+        msg warn "Unsupported architecture for official sing-box binary: $ARCH"
+        return 1
+    fi
+
+    local tmp_tar="/tmp/sing-box-download.tar.gz"
+
+    # Tier A: Try Iranian GitHub mirror (scorpian.ir) if in mirror mode
+    if [ "$MIRROR_MODE" = true ]; then
+        msg info "Attempting to install sing-box from Iranian mirror (scorpian.ir)..."
+        local sb_meta="/tmp/passwall2-singbox-mirror.json"
+        if curl -s -L --fail --connect-timeout 15 "$MIRROR_SINGBOX_API_URL" > "$sb_meta" 2>/dev/null && [ -s "$sb_meta" ]; then
+            local sb_obj=""
+            # Prioritize stable release asset (sing-box-1.x.x-linux-ARCH.tar.gz)
+            sb_obj=$(grep -o '{"url"[^}]*"name":"sing-box-[0-9.]*-linux-'"$sb_arch"'\.tar\.gz"[^}]*}' "$sb_meta" | head -n 1)
+            # Fallback to any matching release asset
+            [ -z "$sb_obj" ] && sb_obj=$(grep -o '{"url"[^}]*"name":"sing-box-[^"]*-linux-'"$sb_arch"'\.tar\.gz"[^}]*}' "$sb_meta" | head -n 1)
+
+            local asset_id="" tar_name=""
+            if [ -n "$sb_obj" ]; then
+                asset_id=$(echo "$sb_obj" | grep -o '"id":[0-9]*' | head -n 1 | cut -d: -f2)
+                tar_name=$(echo "$sb_obj" | grep -o '"name":"[^"]*"' | head -n 1 | cut -d'"' -f4)
+            fi
+            rm -f "$sb_meta" 2>/dev/null
+
+            if [ -n "$asset_id" ]; then
+                [ -n "$tar_name" ] || tar_name="sing-box-linux-${sb_arch}.tar.gz"
+                tmp_tar="/tmp/${tar_name}"
+                local mirror_url="${MIRROR_SINGBOX_ASSET_BASE_URL}/${asset_id}"
+                msg info "Downloading ${tar_name} from mirror (asset ID: ${asset_id})..."
+                if download_file "$mirror_url" "$tmp_tar" && [ -s "$tmp_tar" ]; then
+                    mkdir -p /tmp/sb_extract
+                    tar -xzf "$tmp_tar" -C /tmp/sb_extract/ 2>/dev/null
+                    if [ -f /tmp/sb_extract/*/sing-box ]; then
+                        cp -f /tmp/sb_extract/*/sing-box /usr/bin/sing-box
+                    elif [ -f /tmp/sb_extract/sing-box ]; then
+                        cp -f /tmp/sb_extract/sing-box /usr/bin/sing-box
+                    fi
+                    chmod +x /usr/bin/sing-box 2>/dev/null
+                    rm -rf /tmp/sb_extract "$tmp_tar" 2>/dev/null
+                    if [ -x /usr/bin/sing-box ]; then
+                        msg ok "sing-box binary installed successfully from mirror: /usr/bin/sing-box"
+                        return 0
+                    fi
+                fi
+                rm -rf /tmp/sb_extract "$tmp_tar" 2>/dev/null
+                msg warn "Mirror download for sing-box failed. Falling back to GitHub..."
+            fi
+        else
+            rm -f "$sb_meta" 2>/dev/null
+            msg warn "Failed to fetch sing-box metadata from mirror. Falling back to GitHub..."
+        fi
+    fi
+
+    # Tier B: Official GitHub release (direct / ghfast / ghproxy)
+    msg info "Attempting to install sing-box from official GitHub release..."
+    local tag
+    tag=$(curl -s --fail https://api.github.com/repos/SagerNet/sing-box/releases/latest 2>/dev/null | jsonfilter -e '@.tag_name' 2>/dev/null)
+    if [ -z "$tag" ]; then
+        tag=$(curl -s -I https://github.com/SagerNet/sing-box/releases/latest 2>/dev/null | grep -i '^location:' | sed 's/.*tag\///' | tr -d '\r\n')
+    fi
+    [ -n "$tag" ] || tag="v1.11.4"
+
+    local ver_clean="${tag#v}"
+    local tar_name="sing-box-${ver_clean}-linux-${sb_arch}.tar.gz"
+    local dl_url="https://github.com/SagerNet/sing-box/releases/download/${tag}/${tar_name}"
+    tmp_tar="/tmp/${tar_name}"
+
+    msg info "Downloading ${tar_name} (${tag})..."
+    if download_file "$dl_url" "$tmp_tar" || \
+       download_file "https://ghfast.top/${dl_url}" "$tmp_tar" || \
+       download_file "https://ghproxy.net/${dl_url}" "$tmp_tar"; then
+        if [ -s "$tmp_tar" ]; then
+            mkdir -p /tmp/sb_extract
+            tar -xzf "$tmp_tar" -C /tmp/sb_extract/ 2>/dev/null
+            if [ -f /tmp/sb_extract/*/sing-box ]; then
+                cp -f /tmp/sb_extract/*/sing-box /usr/bin/sing-box
+            elif [ -f /tmp/sb_extract/sing-box ]; then
+                cp -f /tmp/sb_extract/sing-box /usr/bin/sing-box
+            fi
+            chmod +x /usr/bin/sing-box 2>/dev/null
+            rm -rf /tmp/sb_extract "$tmp_tar" 2>/dev/null
+            if [ -x /usr/bin/sing-box ]; then
+                msg ok "sing-box binary installed successfully: /usr/bin/sing-box"
+                return 0
+            fi
+        fi
+    fi
+
+    rm -rf /tmp/sb_extract "$tmp_tar" 2>/dev/null
+    msg warn "Failed to install official sing-box binary from GitHub"
+    return 1
+}
+
+ensure_cores() {
+    [ "$ONLY_LUCI" = true ] && return 0
+
+    local wanted=""
+    if [ "$XRAY_ONLY" = true ]; then
+        wanted="xray-core"
+    elif [ "$SINGBOX_ONLY" = true ]; then
+        wanted="sing-box"
+    else
+        wanted="xray-core sing-box"
+    fi
+
+    msg head "Proxy cores verification"
+
+    local core=""
+    for core in $wanted; do
+        local bin_name=""
+        [ "$core" = "xray-core" ] && bin_name="xray"
+        [ "$core" = "sing-box" ] && bin_name="sing-box"
+
+        if [ -x "/usr/bin/$bin_name" ] || pkg_is_installed "$core"; then
+            msg ok "$core is already installed"
+            continue
+        fi
+
+        msg info "Installing $core..."
+        ensure_direct_resolver
+
+        # Tier 1: Try package manager from feeds
+        local core_log
+        core_log=$(mktemp /tmp/passwall2-core.XXXXXX 2>/dev/null) || core_log="/tmp/passwall2-core.log"
+        if pkg_install "$core" >"$core_log" 2>&1 && [ -x "/usr/bin/$bin_name" ]; then
+            rm -f "$core_log"
+            msg ok "$core installed from package repository"
+            continue
+        fi
+        rm -f "$core_log"
+
+        # Tier 2: Fallback to Iranian mirror (if in mirror mode) or official GitHub binary
+        if [ "$MIRROR_MODE" = true ]; then
+            msg warn "$core package was not found in package repository. Trying Iranian mirror (scorpian.ir)..."
+        else
+            msg warn "$core package was not found in package repository. Trying official GitHub release..."
+        fi
+        if [ "$core" = "xray-core" ]; then
+            install_xray_from_github
+        elif [ "$core" = "sing-box" ]; then
+            install_singbox_from_github
+        fi
+    done
+}
 
 install_from_feed() {
     msg head "Feed installation"
@@ -911,6 +1227,8 @@ install_from_feed() {
         rm -f "$RUNTIME_LOG"
         msg err "Failed to install runtime packages"
     fi
+
+    ensure_cores
 
     msg head "Passwall packages"
     if [ "$CLEAN_INSTALL" = true ]; then
@@ -1086,6 +1404,16 @@ install_from_mirror() {
                     pkg_remove_force "$pkg_name" >/dev/null 2>&1
                 fi
             done
+            if [ "$XRAY_ONLY" = true ]; then
+                pkg_remove_force sing-box >/dev/null 2>&1
+                rm -f /usr/bin/sing-box 2>/dev/null
+            elif [ "$SINGBOX_ONLY" = true ]; then
+                pkg_remove_force xray-core >/dev/null 2>&1
+                rm -f /usr/bin/xray 2>/dev/null
+            else
+                pkg_remove_force xray-core sing-box >/dev/null 2>&1
+                rm -f /usr/bin/xray /usr/bin/sing-box 2>/dev/null
+            fi
         fi
         msg ok "Existing packages removed"
     fi
@@ -1109,6 +1437,17 @@ install_from_mirror() {
                         continue
                         ;;
                 esac
+            elif [ "$XRAY_ONLY" = true ]; then
+                pkg_name=$(get_local_package_name "$pkg_file")
+                case "$pkg_name" in
+                    xray-core|geoview|v2ray-geoip|v2ray-geosite|tcping)
+                        # allowed
+                        ;;
+                    *)
+                        echo -e "${C_CYAN}[INFO]${C_RESET} Skipping $pkg_name (minimal xray mode)"
+                        continue
+                        ;;
+                esac
             fi
 
             ERROR_LOG=$(mktemp)
@@ -1127,6 +1466,8 @@ install_from_mirror() {
             fi
             rm -f "$ERROR_LOG"
         done
+
+        ensure_cores
     fi
 
     msg info "Installing LuCI package"
@@ -1236,6 +1577,16 @@ install_from_github() {
                     pkg_remove_force "$pkg_name" >/dev/null 2>&1
                 fi
             done
+            if [ "$XRAY_ONLY" = true ]; then
+                pkg_remove_force sing-box >/dev/null 2>&1
+                rm -f /usr/bin/sing-box 2>/dev/null
+            elif [ "$SINGBOX_ONLY" = true ]; then
+                pkg_remove_force xray-core >/dev/null 2>&1
+                rm -f /usr/bin/xray 2>/dev/null
+            else
+                pkg_remove_force xray-core sing-box >/dev/null 2>&1
+                rm -f /usr/bin/xray /usr/bin/sing-box 2>/dev/null
+            fi
         fi
         msg ok "Existing packages removed"
     fi
@@ -1259,6 +1610,17 @@ install_from_github() {
                         continue
                         ;;
                 esac
+            elif [ "$XRAY_ONLY" = true ]; then
+                pkg_name=$(get_local_package_name "$pkg_file")
+                case "$pkg_name" in
+                    xray-core|geoview|v2ray-geoip|v2ray-geosite|tcping)
+                        # allowed
+                        ;;
+                    *)
+                        echo -e "${C_CYAN}[INFO]${C_RESET} Skipping $pkg_name (minimal xray mode)"
+                        continue
+                        ;;
+                esac
             fi
 
             ERROR_LOG=$(mktemp)
@@ -1277,6 +1639,8 @@ install_from_github() {
             fi
             rm -f "$ERROR_LOG"
         done
+
+        ensure_cores
     fi
 
     msg info "Installing LuCI package"
@@ -1319,6 +1683,13 @@ fi
 
 if [ "$MOD_RESET_BTN" = true ]; then
     setup_reset_button
+fi
+
+if [ "$ONLY_LUCI" = false ]; then
+    if [ ! -x /usr/bin/xray ] && [ ! -x /usr/bin/sing-box ]; then
+        msg warn "No proxy core is installed! Passwall2 requires at least xray-core or sing-box to operate."
+        msg info "You can install a core manually via: $PACKAGE_MANAGER install xray-core (or sing-box)"
+    fi
 fi
 
 msg ok "Installation completed"

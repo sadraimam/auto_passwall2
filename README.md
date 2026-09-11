@@ -14,9 +14,10 @@ Designed to handle package management variations across OpenWrt versions, automa
 | :--- | :--- |
 | ⚡ **Package Manager Agnostic** | Seamlessly supports both modern OpenWrt releases (`apk` in OpenWrt 24.10 / 25+) and legacy releases (`opkg`), handling `.apk` and `.ipk` packages transparently. |
 | 🌐 **Triple-Source Engine** | Install from official SourceForge package feeds (default), direct **GitHub Releases** (`-g`), or the **Iranian Local GitHub Mirror** (`-gm`) via `scorpian.ir`. |
-| 📦 **Customizable Profiles** | Choose from **Standard**, **Full Feature** (`-f`), **Minimal Sing-Box** (`-s`), or **LuCI UI Only** (`-l`) installation modes to fit your hardware profile. |
+| 📦 **Customizable Profiles** | Choose from **Standard** (both Xray & Sing-Box), **Full Feature** (`-f`), **Minimal Xray** (`-x`), **Minimal Sing-Box** (`-s`), or **LuCI UI Only** (`-l`) installation modes to fit your hardware profile. |
+| 🛡️ **Resilient Core Fallback & Mirror Support** | Automatically ensures proxy cores (`xray-core`, `sing-box`) are installed even after upstream removed them from release archives. In Iranian mirror mode (`-gm`), cores are fetched directly from dedicated local mirrors (`scorpian.ir/repos/XTLS/Xray-core` and `scorpian.ir/repos/sagernet/sing-box`) at maximum speed without censorship, with fallback to official GitHub releases. |
 | 🛠️ **Zero-Downtime Swap** | Safely upgrades `dnsmasq` to `dnsmasq-full` and installs kernel modules (`kmod-nft-tproxy`, `kmod-nft-socket`) while maintaining active internet connectivity via fallback resolvers. |
-| 🇮🇷 **Iran Regional Fixes** | Dedicated flag (`-i`) sets `Asia/Tehran` timezone, configures local DNS (`5.200.200.200`), fixes DNS rebinding for carrier portals (*Irancell, MCI, TCI*), and patches the Passwall status banner. |
+| 🇮🇷 **Iran Regional Fixes** | Dedicated flag (`-i`) initializes local DNS (`5.200.200.200`) right at network startup to overcome censorship/DNS blockage, sets `Asia/Tehran` timezone, fixes DNS rebinding for carrier portals (*Irancell, MCI, TCI*), and patches the Passwall status banner. |
 | 🔑 **Emergency Password Reset** | Re-maps the physical hardware reset button (`-rb`) so a 5-second press clears the root SSH password without wiping your router's configuration. |
 | 📶 **Default Passwords Setup** | Quickly provision uniform Wi-Fi (2.4GHz & 5GHz) and root SSH passwords to `123456789` (`-rw`). |
 
@@ -38,13 +39,14 @@ Customize your installation by appending flags to the script invocation:
 
 | Flag | Long Option | Description |
 | :--- | :--- | :--- |
-| `-g [VER]` | `--github [VER]` | Install directly from GitHub releases instead of SourceForge feeds. Optionally specify a target release tag (e.g., `v2.0.1` or `26.8.17-1`). |
+| `-g [VER]` | `--github [VER]` | Install directly from GitHub releases instead of SourceForge feeds. Optionally specify a target release tag (e.g. `26.8.17-1`). |
 | `-gm [VER]` | `--github-mirror [VER]` | Install from the **Iranian GitHub Mirror** (`scorpian.ir`). Bypasses GitHub rate-limiting, DNS pollution, and ISP throttling in Iran. Alias: `-m`. |
 | `-c` | `--clean` | Perform a clean installation. Removes existing Passwall2 packages and runtime binaries before installing to prevent conflicts. |
-| `-s` | `--singbox` | Minimal install with **sing-box** core only (skips extra proxy binaries to conserve storage space). Automatically uses GitHub/Mirror release download mode. |
+| `-x` | `--xray` | Minimal install with **xray-core** only (skips sing-box and extra binaries to conserve flash storage). |
+| `-s` | `--singbox` | Minimal install with **sing-box** core only (skips xray-core and extra binaries to conserve flash storage). |
 | `-f` | `--full` | Full feature installation. Includes all proxy cores and tools: `chinadns-ng`, `hysteria`, `haproxy`, `microsocks`, `naiveproxy`, `xray-core`, `sing-box`, `geoview`, `v2ray-geoip`, `v2ray-geosite`, `tcping`. |
 | `-l` | `--only-luci` | Install only the LuCI web interface (`luci-app-passwall2`). Skips downloading binary packages (useful if custom cores are pre-built into firmware). |
-| `-i` | `--iran` | Apply Iran region fixes: sets `Asia/Tehran` timezone, adds `5.200.200.200` WAN DNS, fixes carrier DNS rebinding (`my.irancell.ir`, `my.mci.ir`, `login.tci.ir`), and patches Passwall status banner. |
+| `-i` | `--iran` | Apply Iran region fixes: initializes local `5.200.200.200` DNS at script startup, sets `Asia/Tehran` timezone, fixes carrier DNS rebinding (`my.irancell.ir`, `my.mci.ir`, `login.tci.ir`), and patches Passwall status banner. |
 | `-rw` | `--root-wifi` | Set root SSH password and 2.4GHz/5GHz Wi-Fi passwords to `123456789`. |
 | `-rb` | `--reset-button` | Reconfigures hardware reset button: 1-second press reboots router; 5-second press clears root password (`passwd -d root`). |
 | `-h` | `--help` | Display script usage help and exit. |
@@ -59,25 +61,31 @@ Uses the Iranian GitHub Mirror, clean package installation, root/Wi-Fi password 
 sh /tmp/set.sh -gm -c -rw -i
 ```
 
-### 2. Clean Install from Official GitHub Releases
-Fetches the latest release binaries directly from GitHub and performs a clean reinstall:
+### 2. Clean Install from Official GitHub Releases (Dual Cores)
+Fetches the latest release binaries directly from GitHub, ensuring both Xray and Sing-box are installed:
 ```bash
 sh /tmp/set.sh -g -c
 ```
 
-### 3. Pinning a Specific Release Version
+### 3. Minimal Xray-Only Install (Maximum Storage Savings)
+Installs only `xray-core` and essential geo-databases, leaving maximum free storage on your overlay partition:
+```bash
+sh /tmp/set.sh -x -c
+```
+
+### 4. Minimal Sing-Box Install
+Installs only `sing-box` core and required geo-databases:
+```bash
+sh /tmp/set.sh -s -c
+```
+
+### 5. Pinning a Specific Release Version
 Install a specific release version (e.g., `26.8.17-1`) via the Iranian Mirror:
 ```bash
 sh /tmp/set.sh -gm 26.8.17-1 -c
 ```
 
-### 4. Minimal Sing-Box Install (For Storage-Constrained Routers)
-Installs only the `sing-box` core and required geo-databases, leaving maximum free storage on your overlay partition:
-```bash
-sh /tmp/set.sh -s -c
-```
-
-### 5. Full Feature Stack Installation
+### 6. Full Feature Stack Installation
 Installs every supported proxy protocol core (Hysteria, NaiveProxy, HAProxy, ChinaDNS-NG, etc.):
 ```bash
 sh /tmp/set.sh -f -c
@@ -112,4 +120,4 @@ sh /tmp/set.sh -f -c
 - **Script Maintainer:** [sadraimam](https://github.com/sadraimam)
 - **Passwall2 Upstream Project:** [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2)
 - **Iranian Mirror Provider:** [scorpian.ir](https://scorpian.ir/repos/Openwrt-Passwall/openwrt-passwall2)
-- **Thanks to: [enxy0](https://github.com/enxy0/passwall2_install)
+- **Thanks to:** [enxy0](https://github.com/enxy0/passwall2_install)
