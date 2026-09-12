@@ -21,6 +21,8 @@ FEED_BASE_URL="https://master.dl.sourceforge.net/project/openwrt-passwall-build"
 FEED_NAMES="passwall_luci passwall_packages passwall2"
 FEED_RUNTIME_PACKAGES="xray-core sing-box geoview v2ray-geoip v2ray-geosite tcping"
 FEED_RUNTIME_PACKAGES_FULL="xray-core sing-box chinadns-ng hysteria geoview v2ray-geoip v2ray-geosite haproxy microsocks naiveproxy tcping"
+FEED_RUNTIME_PACKAGES_SINGBOX="sing-box geoview v2ray-geoip v2ray-geosite tcping"
+FEED_RUNTIME_PACKAGES_XRAY="xray-core geoview v2ray-geoip v2ray-geosite tcping"
 
 C_RESET='\033[0m'
 C_BOLD='\033[1m'
@@ -209,6 +211,30 @@ pkg_available() {
     esac
 }
 
+prompt_continue_luci_or_exit() {
+    local reason="$1"
+    [ -n "$reason" ] && msg warn "$reason"
+    while true; do
+        printf "${C_YELLOW}Press [c] to continue with installation without runtime packages (luci-only) or [e] to exit: ${C_RESET}"
+        read -rsn1 input
+        echo
+        case "$input" in
+            c|C)
+                ONLY_LUCI=true
+                FEED_RUNTIME_PACKAGES=""
+                msg info "Continuing with LuCI-only installation..."
+                return 0
+                ;;
+            e|E)
+                msg err "Installation aborted."
+                ;;
+            *)
+                msg warn "Invalid choice! Press 'c' or 'e'"
+                ;;
+        esac
+    done
+}
+
 ensure_feed_packages_available() {
     local missing=""
     local package=""
@@ -216,6 +242,8 @@ ensure_feed_packages_available() {
     if ! pkg_available luci-app-passwall2; then
         msg err "Required package luci-app-passwall2 is unavailable in feeds. Use --github or retry after feed refresh works."
     fi
+
+    [ "$ONLY_LUCI" = true ] && return 0
 
     for package in $FEED_RUNTIME_PACKAGES; do
         if ! pkg_available "$package"; then
@@ -225,7 +253,7 @@ ensure_feed_packages_available() {
 
     missing=$(echo "$missing" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
     if [ -n "$missing" ]; then
-        msg warn "Some feed packages are unavailable: $missing. Any missing cores will be resolved via fallback."
+        prompt_continue_luci_or_exit "Some feed packages are unavailable: $missing"
     fi
 }
 
@@ -378,22 +406,36 @@ install_feed_key() {
                 return 0
             fi
 
-            download_file "$key_url" /tmp/passwall.pub || \
-                download_file "https://sourceforge.net/projects/openwrt-passwall-build/files/apk.pub/download" /tmp/passwall.pub || \
-                msg err "Failed to download feed key"
-            mkdir -p /etc/apk/keys || msg err "Failed to prepare apk keys directory"
-            cp /tmp/passwall.pub "$key_file" || msg err "Failed to add feed key"
+            if ! download_file "$key_url" /tmp/passwall.pub && \
+               ! download_file "https://sourceforge.net/projects/openwrt-passwall-build/files/apk.pub/download" /tmp/passwall.pub; then
+                msg warn "Failed to download feed key. Skipping feed key and continuing with installation..."
+                rm -f /tmp/passwall.pub 2>/dev/null
+                return 0
+            fi
+            mkdir -p /etc/apk/keys 2>/dev/null
+            if cp /tmp/passwall.pub "$key_file" 2>/dev/null; then
+                msg ok "Feed key added"
+            else
+                msg warn "Failed to save feed key to $key_file; continuing..."
+            fi
             ;;
         opkg)
-            download_file "$key_url" /tmp/passwall.pub || \
-                download_file "https://sourceforge.net/projects/openwrt-passwall-build/files/ipk.pub/download" /tmp/passwall.pub || \
-                msg err "Failed to download feed key"
-            opkg-key add /tmp/passwall.pub || msg err "Failed to add feed key"
+            if ! download_file "$key_url" /tmp/passwall.pub && \
+               ! download_file "https://sourceforge.net/projects/openwrt-passwall-build/files/ipk.pub/download" /tmp/passwall.pub; then
+                msg warn "Failed to download feed key. Skipping feed key and continuing with installation..."
+                rm -f /tmp/passwall.pub 2>/dev/null
+                return 0
+            fi
+            if opkg-key add /tmp/passwall.pub >/dev/null 2>&1; then
+                msg ok "Feed key added"
+            else
+                msg warn "Failed to add feed key with opkg-key; continuing..."
+            fi
             ;;
     esac
 
-    rm -f /tmp/passwall.pub
-    msg ok "Feed key added"
+    rm -f /tmp/passwall.pub 2>/dev/null
+    return 0
 }
 
 get_feed_url() {
@@ -403,6 +445,43 @@ get_feed_url() {
         apk) echo "${FEED_BASE_URL}/releases/packages-${RELEASE_VER}/${ARCH}/${feed}/packages.adb" ;;
         opkg) echo "${FEED_BASE_URL}/releases/packages-${RELEASE_VER}/${ARCH}/${feed}" ;;
     esac
+}
+
+configure_feeds() {
+    msg head "Feed configuration"
+
+    if [ -z "$RELEASE_VER" ]; then
+        msg warn "OpenWrt release not detected; skipping feed configuration."
+        return 0
+    fi
+
+    msg info "Configuring SourceForge feeds"
+    msg info "Downloading feed key"
+    install_feed_key
+
+    msg info "Writing feed entries"
+    case "$PACKAGE_MANAGER" in
+        apk)
+            mkdir -p /etc/apk/repositories.d 2>/dev/null
+            FEED_CONFIG="/etc/apk/repositories.d/customfeeds.list"
+            [ -f "$FEED_CONFIG" ] && cp "$FEED_CONFIG" "$FEED_CONFIG.bak"
+            > "$FEED_CONFIG"
+            ;;
+        opkg)
+            FEED_CONFIG="/etc/opkg/customfeeds.conf"
+            [ -f "$FEED_CONFIG" ] && cp "$FEED_CONFIG" "$FEED_CONFIG.bak"
+            > "$FEED_CONFIG"
+            ;;
+    esac
+
+    for feed in $FEED_NAMES; do
+        FEED_URL=$(get_feed_url "$feed")
+        case "$PACKAGE_MANAGER" in
+            apk) echo "$FEED_URL" >> "$FEED_CONFIG" ;;
+            opkg) echo "src/gz $feed $FEED_URL" >> "$FEED_CONFIG" ;;
+        esac
+        msg ok "Added feed: $feed"
+    done
 }
 
 get_architecture() {
@@ -740,11 +819,11 @@ fi
 if [ "$FULL_FEATURE" = true ]; then
     FEED_RUNTIME_PACKAGES="$FEED_RUNTIME_PACKAGES_FULL"
 elif [ "$XRAY_ONLY" = true ]; then
-    FEED_RUNTIME_PACKAGES="xray-core geoview v2ray-geoip v2ray-geosite tcping"
+    FEED_RUNTIME_PACKAGES="$FEED_RUNTIME_PACKAGES_XRAY"
 elif [ "$SINGBOX_ONLY" = true ]; then
-    FEED_RUNTIME_PACKAGES="sing-box geoview v2ray-geoip v2ray-geosite tcping"
+    FEED_RUNTIME_PACKAGES="$FEED_RUNTIME_PACKAGES_SINGBOX"
 else
-    FEED_RUNTIME_PACKAGES="xray-core sing-box geoview v2ray-geoip v2ray-geosite tcping"
+    FEED_RUNTIME_PACKAGES="$FEED_RUNTIME_PACKAGES"
 fi
 
 msg head "System checks"
@@ -1099,34 +1178,6 @@ install_from_feed() {
         msg err "OpenWrt release not detected"
     fi
 
-    msg info "Configuring feeds"
-    msg info "Downloading feed key"
-    install_feed_key
-
-    msg info "Writing feed entries"
-    case "$PACKAGE_MANAGER" in
-        apk)
-            mkdir -p /etc/apk/repositories.d || msg err "Failed to prepare apk repositories directory"
-            FEED_CONFIG="/etc/apk/repositories.d/customfeeds.list"
-            [ -f "$FEED_CONFIG" ] && cp "$FEED_CONFIG" "$FEED_CONFIG.bak"
-            > "$FEED_CONFIG"
-            ;;
-        opkg)
-            FEED_CONFIG="/etc/opkg/customfeeds.conf"
-            [ -f "$FEED_CONFIG" ] && cp "$FEED_CONFIG" "$FEED_CONFIG.bak"
-            > "$FEED_CONFIG"
-            ;;
-    esac
-
-    for feed in $FEED_NAMES; do
-        FEED_URL=$(get_feed_url "$feed")
-        case "$PACKAGE_MANAGER" in
-            apk) echo "$FEED_URL" >> "$FEED_CONFIG" ;;
-            opkg) echo "src/gz $feed $FEED_URL" >> "$FEED_CONFIG" ;;
-        esac
-        msg ok "Added feed: $feed"
-    done
-
     msg head "Package discovery"
     msg info "Checking installed Passwall packages"
 
@@ -1183,16 +1234,18 @@ install_from_feed() {
             msg info "No additional installed Passwall feed packages to remove"
         fi
 
-        RUNTIME_INSTALLED_PACKAGES=$(list_installed_named_packages "$FEED_RUNTIME_PACKAGES")
-        if [ -n "$RUNTIME_INSTALLED_PACKAGES" ]; then
-            msg info "Removing runtime packages: $RUNTIME_INSTALLED_PACKAGES"
-            if ! pkg_remove_force $RUNTIME_INSTALLED_PACKAGES >"$REMOVE_LOG" 2>&1; then
-                cat "$REMOVE_LOG"
-                rm -f "$REMOVE_LOG"
-                msg err "Failed to remove Passwall runtime packages"
+        if [ "$ONLY_LUCI" = false ] && [ -n "$FEED_RUNTIME_PACKAGES" ]; then
+            RUNTIME_INSTALLED_PACKAGES=$(list_installed_named_packages "$FEED_RUNTIME_PACKAGES")
+            if [ -n "$RUNTIME_INSTALLED_PACKAGES" ]; then
+                msg info "Removing runtime packages: $RUNTIME_INSTALLED_PACKAGES"
+                if ! pkg_remove_force $RUNTIME_INSTALLED_PACKAGES >"$REMOVE_LOG" 2>&1; then
+                    cat "$REMOVE_LOG"
+                    rm -f "$REMOVE_LOG"
+                    msg err "Failed to remove Passwall runtime packages"
+                fi
+            else
+                msg info "No installed Passwall runtime packages to remove"
             fi
-        else
-            msg info "No installed Passwall runtime packages to remove"
         fi
 
         rm -f "$REMOVE_LOG"
@@ -1214,18 +1267,20 @@ install_from_feed() {
         msg err "Failed to install Passwall2"
     fi
 
-    msg head "Runtime packages"
-    RUNTIME_LOG=$(mktemp /tmp/passwall2-runtime.XXXXXX) || msg err "Failed to create temp file"
-    if install_available_feed_packages "$FEED_RUNTIME_PACKAGES" >"$RUNTIME_LOG" 2>&1; then
-        cat "$RUNTIME_LOG"
-        print_pkg_warnings "$RUNTIME_LOG"
-        rm -f "$RUNTIME_LOG"
-        msg ok "Runtime packages installed"
-    else
-        cat "$RUNTIME_LOG"
-        print_space_hint "$RUNTIME_LOG"
-        rm -f "$RUNTIME_LOG"
-        msg err "Failed to install runtime packages"
+    if [ "$ONLY_LUCI" = false ] && [ -n "$FEED_RUNTIME_PACKAGES" ]; then
+        msg head "Runtime packages"
+        RUNTIME_LOG=$(mktemp /tmp/passwall2-runtime.XXXXXX) || msg err "Failed to create temp file"
+        if install_available_feed_packages "$FEED_RUNTIME_PACKAGES" >"$RUNTIME_LOG" 2>&1; then
+            cat "$RUNTIME_LOG"
+            print_pkg_warnings "$RUNTIME_LOG"
+            rm -f "$RUNTIME_LOG"
+            msg ok "Runtime packages installed"
+        else
+            cat "$RUNTIME_LOG"
+            print_space_hint "$RUNTIME_LOG"
+            rm -f "$RUNTIME_LOG"
+            prompt_continue_luci_or_exit "Failed to install runtime packages"
+        fi
     fi
 
     ensure_cores
@@ -1360,7 +1415,7 @@ install_from_mirror() {
             echo "$SUPPORTED_ARCHS"
             msg warn "Available release assets:"
             echo "$API_RESPONSE" | jsonfilter -e "@.releases[${RELEASE_INDEX}].assets[*].name" | grep ".zip"
-            msg err "No compatible binary package found. Use --only-luci for a LuCI-only install"
+            prompt_continue_luci_or_exit "No compatible binary package found in mirror release."
         fi
     else
         msg info "Skipping binary package lookup"
@@ -1533,7 +1588,7 @@ install_from_github() {
             echo "$SUPPORTED_ARCHS"
             msg warn "Available release assets:"
             echo "$API_RESPONSE" | jsonfilter -e '@.assets[*].name' | grep ".zip"
-            msg err "No compatible binary package found. Use --only-luci for a LuCI-only install"
+            prompt_continue_luci_or_exit "No compatible binary package found in GitHub release."
         fi
     else
         msg info "Skipping binary package lookup"
@@ -1662,6 +1717,8 @@ install_from_github() {
     fi
 }
 
+
+configure_feeds
 
 if [ "$GITHUB_MODE" = false ] && [ "$MIRROR_MODE" = false ]; then
     install_from_feed
