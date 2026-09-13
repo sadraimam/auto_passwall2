@@ -20,7 +20,7 @@ trap 'rm -rf "$TEMP_DIR" /tmp/passwall2-*.XXXXXX /tmp/passwall2-* 2>/dev/null' E
 FEED_BASE_URL="https://master.dl.sourceforge.net/project/openwrt-passwall-build"
 FEED_NAMES="passwall_luci passwall_packages passwall2"
 FEED_RUNTIME_PACKAGES="xray-core sing-box geoview v2ray-geoip v2ray-geosite tcping"
-FEED_RUNTIME_PACKAGES_FULL="xray-core sing-box chinadns-ng hysteria geoview v2ray-geoip v2ray-geosite haproxy microsocks naiveproxy tcping"
+FEED_RUNTIME_PACKAGES_FULL="xray-core sing-box chinadns-ng geoview shadowsocks-rust shadowsocksr-libev simple-obfs v2ray-plugin v2ray-geoip v2ray-geosite tcping haproxy microsocks"
 FEED_RUNTIME_PACKAGES_SINGBOX="sing-box geoview v2ray-geoip v2ray-geosite tcping"
 FEED_RUNTIME_PACKAGES_XRAY="xray-core geoview v2ray-geoip v2ray-geosite tcping"
 
