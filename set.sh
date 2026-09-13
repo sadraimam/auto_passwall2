@@ -362,7 +362,23 @@ list_installed_named_packages() {
 pkg_print_architectures() {
     case "$PACKAGE_MANAGER" in
         apk)
-            get_architecture
+            local arch
+            arch=$(get_architecture)
+            echo "$arch"
+            case "$arch" in
+                aarch64_*)
+                    [ "$arch" != "aarch64_generic" ] && echo "aarch64_generic"
+                    ;;
+                arm_cortex-a7_neon-vfpv4)
+                    echo "arm_cortex-a7"
+                    ;;
+                mipsel_24kc)
+                    echo "mipsel_mips32"
+                    ;;
+                mips_24kc)
+                    echo "mips_mips32"
+                    ;;
+            esac
             ;;
         opkg)
             opkg print-architecture | awk '{print $2}' | awk '{a[NR]=$0} END {for(i=NR;i>0;i--) print a[i]}'
@@ -1374,8 +1390,8 @@ install_from_mirror() {
     msg ok "Release: ${C_BOLD}$RELEASE_TAG${C_RESET}"
 
     case "$PACKAGE_TYPE" in
-        apk) LUCI_FILENAME=$(echo "$API_RESPONSE" | jsonfilter -e "@.releases[${RELEASE_INDEX}].assets[*].name" | grep "^luci-app-passwall2-" | grep -E "\.${PACKAGE_TYPE}$" | head -n 1) ;;
-        ipk) LUCI_FILENAME=$(echo "$API_RESPONSE" | jsonfilter -e "@.releases[${RELEASE_INDEX}].assets[*].name" | grep "^luci-app-passwall2_" | grep -E "\.${PACKAGE_TYPE}$" | head -n 1) ;;
+        apk) LUCI_FILENAME=$(echo "$API_RESPONSE" | jsonfilter -e "@.releases[${RELEASE_INDEX}].assets[*].name" | grep -E "^luci-app-passwall2[-_]" | grep -E "\.${PACKAGE_TYPE}$" | head -n 1) ;;
+        ipk) LUCI_FILENAME=$(echo "$API_RESPONSE" | jsonfilter -e "@.releases[${RELEASE_INDEX}].assets[*].name" | grep -E "^luci-app-passwall2[-_]" | grep -E "\.${PACKAGE_TYPE}$" | head -n 1) ;;
     esac
 
     LUCI_ASSET_ID=$(echo "$API_RESPONSE" | jsonfilter -e "@.releases[${RELEASE_INDEX}].assets[@.name='$LUCI_FILENAME'].id" 2>/dev/null)
@@ -1394,20 +1410,20 @@ install_from_mirror() {
         SUPPORTED_ARCHS=$(pkg_print_architectures)
 
         for arch in $SUPPORTED_ARCHS; do
-            CANDIDATE_NAME="passwall_packages_${PACKAGE_TYPE}_${arch}.zip"
-
-            if echo "$API_RESPONSE" | jsonfilter -e "@.releases[${RELEASE_INDEX}].assets[*].name" | grep -q "^${CANDIDATE_NAME}$"; then
-                ZIP_FILENAME="$CANDIDATE_NAME"
-                ZIP_ASSET_ID=$(echo "$API_RESPONSE" | jsonfilter -e "@.releases[${RELEASE_INDEX}].assets[@.name='$ZIP_FILENAME'].id" 2>/dev/null)
-                if [ -z "$ZIP_ASSET_ID" ]; then
-                    ZIP_ASSET_ID=$(echo "$API_RESPONSE" | jsonfilter -e "@.releases[${RELEASE_INDEX}].assets[*]" 2>/dev/null | awk -v target="$ZIP_FILENAME" '
-                        /"name":/ || /"name" :/ { name=$0; sub(/.*"name"[[:space:]]*:[[:space:]]*"/, "", name); sub(/".*/, "", name) }
-                        /"id":/ || /"id" :/ { id=$0; sub(/.*"id"[[:space:]]*:[[:space:]]*/, "", id); sub(/,.*/, "", id); sub(/[[:space:]].*/, "", id); if (name == target) { print id; exit } }
-                    ')
+            for candidate in "packages_${PACKAGE_TYPE}_${arch}.zip" "passwall_packages_${PACKAGE_TYPE}_${arch}.zip"; do
+                if echo "$API_RESPONSE" | jsonfilter -e "@.releases[${RELEASE_INDEX}].assets[*].name" | grep -q "^${candidate}$"; then
+                    ZIP_FILENAME="$candidate"
+                    ZIP_ASSET_ID=$(echo "$API_RESPONSE" | jsonfilter -e "@.releases[${RELEASE_INDEX}].assets[@.name='$ZIP_FILENAME'].id" 2>/dev/null)
+                    if [ -z "$ZIP_ASSET_ID" ]; then
+                        ZIP_ASSET_ID=$(echo "$API_RESPONSE" | jsonfilter -e "@.releases[${RELEASE_INDEX}].assets[*]" 2>/dev/null | awk -v target="$ZIP_FILENAME" '
+                            /"name":/ || /"name" :/ { name=$0; sub(/.*"name"[[:space:]]*:[[:space:]]*"/, "", name); sub(/".*/, "", name) }
+                            /"id":/ || /"id" :/ { id=$0; sub(/.*"id"[[:space:]]*:[[:space:]]*/, "", id); sub(/,.*/, "", id); sub(/[[:space:]].*/, "", id); if (name == target) { print id; exit } }
+                        ')
+                    fi
+                    msg ok "Binary package: ${C_BOLD}$ZIP_FILENAME${C_RESET}"
+                    break 2
                 fi
-                msg ok "Binary package: ${C_BOLD}$ZIP_FILENAME${C_RESET}"
-                break
-            fi
+            done
         done
 
         if [ -z "$ZIP_FILENAME" ]; then
@@ -1563,8 +1579,8 @@ install_from_github() {
     msg ok "Release: ${C_BOLD}$RELEASE_TAG${C_RESET}"
 
     case "$PACKAGE_TYPE" in
-        apk) LUCI_FILENAME=$(echo "$API_RESPONSE" | jsonfilter -e '@.assets[*].name' | grep "^luci-app-passwall2-" | grep -E "\.${PACKAGE_TYPE}$" | head -n 1) ;;
-        ipk) LUCI_FILENAME=$(echo "$API_RESPONSE" | jsonfilter -e '@.assets[*].name' | grep "^luci-app-passwall2_" | grep -E "\.${PACKAGE_TYPE}$" | head -n 1) ;;
+        apk) LUCI_FILENAME=$(echo "$API_RESPONSE" | jsonfilter -e '@.assets[*].name' | grep -E "^luci-app-passwall2[-_]" | grep -E "\.${PACKAGE_TYPE}$" | head -n 1) ;;
+        ipk) LUCI_FILENAME=$(echo "$API_RESPONSE" | jsonfilter -e '@.assets[*].name' | grep -E "^luci-app-passwall2[-_]" | grep -E "\.${PACKAGE_TYPE}$" | head -n 1) ;;
     esac
 
     ZIP_FILENAME=""
@@ -1574,13 +1590,13 @@ install_from_github() {
         SUPPORTED_ARCHS=$(pkg_print_architectures)
 
         for arch in $SUPPORTED_ARCHS; do
-            CANDIDATE_NAME="passwall_packages_${PACKAGE_TYPE}_${arch}.zip"
-
-            if echo "$API_RESPONSE" | jsonfilter -e '@.assets[*].name' | grep -q "^${CANDIDATE_NAME}$"; then
-                ZIP_FILENAME="$CANDIDATE_NAME"
-                msg ok "Binary package: ${C_BOLD}$ZIP_FILENAME${C_RESET}"
-                break
-            fi
+            for candidate in "packages_${PACKAGE_TYPE}_${arch}.zip" "passwall_packages_${PACKAGE_TYPE}_${arch}.zip"; do
+                if echo "$API_RESPONSE" | jsonfilter -e '@.assets[*].name' | grep -q "^${candidate}$"; then
+                    ZIP_FILENAME="$candidate"
+                    msg ok "Binary package: ${C_BOLD}$ZIP_FILENAME${C_RESET}"
+                    break 2
+                fi
+            done
         done
 
         if [ -z "$ZIP_FILENAME" ]; then
