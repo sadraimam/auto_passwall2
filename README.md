@@ -44,11 +44,14 @@ Customize your installation by appending flags to the script invocation:
 | `-c` | `--clean` | Perform a clean installation. Removes existing Passwall2 packages and runtime binaries before installing to prevent conflicts. |
 | `-x` | `--xray` | Minimal install with **xray-core** only (skips sing-box and extra binaries to conserve flash storage). |
 | `-s` | `--singbox` | Minimal install with **sing-box** core only (skips xray-core and extra binaries to conserve flash storage). |
+| `-lb` | `--loadbalancing` | Install and ensure load balancing packages (`haproxy`, `microsocks`). Works alongside `-s`, `-x`, or default profile; skipped automatically when used with `-f` (already included in full install). |
 | `-f` | `--full` | Full feature installation. Includes all proxy cores and tools: `chinadns-ng`, `hysteria`, `haproxy`, `microsocks`, `naiveproxy`, `xray-core`, `sing-box`, `geoview`, `v2ray-geoip`, `v2ray-geosite`, `tcping`. |
 | `-l` | `--only-luci` | Install only the LuCI web interface (`luci-app-passwall2`). Skips downloading binary packages (useful if custom cores are pre-built into firmware). |
 | `-i` | `--iran` | Apply Iran region fixes: initializes local `5.200.200.200` DNS at script startup, sets `Asia/Tehran` timezone, fixes carrier DNS rebinding (`my.irancell.ir`, `my.mci.ir`, `login.tci.ir`), and patches Passwall status banner. |
 | `-rw` | `--root-wifi` | Set root SSH password and 2.4GHz/5GHz Wi-Fi passwords to `123456789`. |
 | `-rb` | `--reset-button` | Reconfigures hardware reset button: 1-second press reboots router; 5-second press clears root password (`passwd -d root`). |
+| `-nf` | `--no-feed` | Do not add the Passwall build feed; install cores from existing feeds. |
+| `-ns` | `--no-restart` | Do not restart Passwall2 services after installation. |
 | `-h` | `--help` | Display script usage help and exit. |
 
 ---
@@ -73,10 +76,10 @@ Installs only `xray-core` and essential geo-databases, leaving maximum free stor
 sh /tmp/set.sh -x -c
 ```
 
-### 4. Minimal Sing-Box Install
-Installs only `sing-box` core and required geo-databases:
+### 4. Minimal Sing-Box Install with Load Balancing
+Installs lightweight `sing-box` along with `haproxy` and `microsocks` for proxy load balancing:
 ```bash
-sh /tmp/set.sh -s -c
+sh /tmp/set.sh -gm -s -lb -i
 ```
 
 ### 5. Pinning a Specific Release Version
@@ -95,7 +98,7 @@ sh /tmp/set.sh -f -c
 
 ## 📋 System Requirements
 
-- **Supported OS:** OpenWrt (Official release builds; Snapshot builds are unsupported).
+- **Supported OS:** OpenWrt (Official release and Snapshot builds are supported).
 - **Architecture:** `x86_64`, `aarch64_cortex-a53`, `aarch64_cortex-a72`, `aarch64_generic`, `arm_cortex-a7`, `arm_cortex-a15`, `mipsel_24kc`, `mips_24kc`, etc.
 - **Minimum Hardware Profile:**
   - **Flash:** 128 MB (60 MB+ available overlay storage)

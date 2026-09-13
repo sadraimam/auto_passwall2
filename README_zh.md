@@ -44,11 +44,14 @@ rm -f /tmp/set.sh && wget -O /tmp/set.sh https://raw.githubusercontent.com/sadra
 | `-c` | `--clean` | 全新安装（Clean Install）。在安装前自动卸载已有 Passwall2 组件及二进制文件，杜绝冲突。 |
 | `-x` | `--xray` | 仅安装 **xray-core** 的精简模式（跳过 sing-box 及附加组件，大幅节省 Flash 存储空间）。 |
 | `-s` | `--singbox` | 仅安装 **sing-box** 核心的精简模式（跳过 xray-core 及附加组件，大幅节省 Flash 存储空间）。 |
+| `-lb` | `--loadbalancing` | 安装并确保负载均衡组件（`haproxy`, `microsocks`）。可与 `-s`、`-x` 或默认模式配合使用；与 `-f` 同时使用时会自动跳过（全功能模式已包含）。 |
 | `-f` | `--full` | 全功能完整安装。包含所有协议核心与辅助工具：`chinadns-ng`, `hysteria`, `haproxy`, `microsocks`, `naiveproxy`, `xray-core`, `sing-box`, `geoview`, `v2ray-geoip`, `v2ray-geosite`, `tcping`。 |
 | `-l` | `--only-luci` | 仅安装 LuCI 控制面板（`luci-app-passwall2`）。跳过下载二进制软件包（适用于固件已内置核心的情况）。 |
 | `-i` | `--iran` | 应用伊朗区域优化：在脚本启动时初始化本地 `5.200.200.200` DNS，设置 `Asia/Tehran` 时区，修复运营商 DNS 重绑定（`my.irancell.ir`, `my.mci.ir`, `login.tci.ir`），并修补 Passwall 状态横幅。 |
 | `-rw` | `--root-wifi` | 将 root SSH 密码及 2.4GHz/5GHz Wi-Fi 密码设为 `123456789`。 |
 | `-rb` | `--reset-button` | 重映射物理 Reset 键：轻按 1 秒重启路由器；长按 5 秒清除 root 密码（`passwd -d root`）。 |
+| `-nf` | `--no-feed` | 不添加 Passwall 软件源；直接从现有软件源安装核心。 |
+| `-ns` | `--no-restart` | 安装完成后不自动重启 Passwall2 服务。 |
 | `-h` | `--help` | 显示脚本使用帮助并退出。 |
 
 ---
@@ -73,10 +76,10 @@ sh /tmp/set.sh -g -c
 sh /tmp/set.sh -x -c
 ```
 
-### 4. 精简 Sing-Box 方案
-仅安装 `sing-box` 核心与必要规则数据库：
+### 4. 精简 Sing-Box 与负载均衡方案
+安装轻量级 `sing-box` 核心并附加 `haproxy` 与 `microsocks` 实现多节点负载均衡：
 ```bash
-sh /tmp/set.sh -s -c
+sh /tmp/set.sh -gm -s -lb -i
 ```
 
 ### 5. 锁定特定版本安装
@@ -95,7 +98,7 @@ sh /tmp/set.sh -f -c
 
 ## 📋 系统要求
 
-- **支持的操作系统：** OpenWrt（官方 Release 正式版；不支持 Snapshot 快照版）。
+- **支持的操作系统：** OpenWrt（支持官方 Release 正式版与 Snapshot 快照版）。
 - **CPU 架构：** `x86_64`, `aarch64_cortex-a53`, `aarch64_cortex-a72`, `aarch64_generic`, `arm_cortex-a7`, `arm_cortex-a15`, `mipsel_24kc`, `mips_24kc` 等。
 - **最低硬件配置：**
   - **Flash 存储：** 128 MB（overlay 分区可用空间 60 MB+）

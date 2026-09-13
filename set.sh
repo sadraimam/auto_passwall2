@@ -15,6 +15,13 @@ CONFIG_DIR="/etc/config"
 BACKUP_SUFFIX=$(date +%Y%m%d)
 MIN_SPACE_KB=20480
 
+PASSWALL_SERVICES="passwall2 passwall2_server"
+RUNNING_SERVICES=""
+RESTART_SERVICES=true
+NO_FEED=false
+LOAD_BALANCING=false
+
+
 trap 'rm -rf "$TEMP_DIR" /tmp/passwall2-*.XXXXXX /tmp/passwall2-* 2>/dev/null' EXIT INT TERM
 
 FEED_BASE_URL="https://master.dl.sourceforge.net/project/openwrt-passwall-build"
@@ -56,6 +63,59 @@ detect_package_manager() {
     else
         msg err "No supported package manager found: need apk or opkg"
     fi
+}
+
+service_is_running() {
+    local pattern="$1"
+
+    if command_exists pgrep; then
+        pgrep -f "$pattern" >/dev/null 2>&1
+    else
+        grep -qF "$pattern" /proc/[0-9]*/cmdline 2>/dev/null
+    fi
+}
+
+record_running_services() {
+    local name=""
+
+    RUNNING_SERVICES=""
+    [ "$RESTART_SERVICES" = true ] || return 0
+
+    for name in $PASSWALL_SERVICES; do
+        if service_is_running "$name/bin/"; then
+            RUNNING_SERVICES="$RUNNING_SERVICES $name"
+        fi
+    done
+}
+
+restart_running_services() {
+    local name=""
+    local init_script=""
+
+    if [ "$RESTART_SERVICES" != true ]; then
+        msg info "Service restart skipped (--no-restart)"
+        return 0
+    fi
+
+    for name in $PASSWALL_SERVICES; do
+        case " $RUNNING_SERVICES " in
+            *" $name "*) ;;
+            *)
+                continue
+                ;;
+        esac
+
+        init_script="/etc/init.d/$name"
+        if [ ! -x "$init_script" ]; then
+            continue
+        fi
+
+        if "$init_script" restart >/dev/null 2>&1; then
+            msg ok "$name restarted"
+        else
+            msg warn "Failed to restart $name. Restart it by hand: $init_script restart"
+        fi
+    done
 }
 
 pkg_update() {
@@ -170,8 +230,10 @@ ensure_command() {
     local path="$1"
     local package="$2"
 
-    [ -x "$path" ] && return 0
-    msg warn "Installing $package"
+    if [ -x "$path" ] || command_exists "$package"; then
+        return 0
+    fi
+    msg info "Installing required tool: $package"
     pkg_update && pkg_install "$package" || msg err "Failed to install $package"
 }
 
@@ -330,8 +392,29 @@ ensure_dnsmasq_full() {
     case "$PACKAGE_MANAGER" in
         opkg)
             if pkg_is_installed dnsmasq; then
-                msg info "Removing dnsmasq"
+                msg info "Preparing dnsmasq-full package..."
+                local dnsmasq_log
+                dnsmasq_log=$(mktemp /tmp/passwall2-dnsmasq.XXXXXX 2>/dev/null) || dnsmasq_log="/tmp/passwall2-dnsmasq.log"
+                if ! (cd "$TEMP_DIR" && opkg download dnsmasq-full) >"$dnsmasq_log" 2>&1; then
+                    cat "$dnsmasq_log" 2>/dev/null | sed 's/^/  /'
+                    rm -f "$dnsmasq_log"
+                    msg err "Failed to download dnsmasq-full before replacing dnsmasq"
+                fi
+                rm -f "$dnsmasq_log"
+
+                local dnsmasq_full_ipk
+                dnsmasq_full_ipk=$(ls "$TEMP_DIR"/dnsmasq-full_*.ipk 2>/dev/null | head -n 1)
+                [ -n "$dnsmasq_full_ipk" ] || msg err "Downloaded dnsmasq-full package was not found in $TEMP_DIR"
+
+                msg info "Replacing dnsmasq with dnsmasq-full"
                 pkg_remove dnsmasq || msg err "Failed to remove dnsmasq"
+                opkg install "$dnsmasq_full_ipk" || msg err "Failed to install dnsmasq-full"
+
+                if [ -x /etc/init.d/dnsmasq ]; then
+                    /etc/init.d/dnsmasq restart >/dev/null 2>&1 || msg warn "dnsmasq restart failed; check DNS manually"
+                fi
+                msg ok "dnsmasq-full installed"
+                return 0
             fi
             ;;
     esac
@@ -418,6 +501,7 @@ install_feed_key() {
         apk)
             key_file="/etc/apk/keys/openwrt-passwall-build.pub"
             if [ -s "$key_file" ]; then
+                [ -s "/etc/apk/keys/openwrt-passwall-build.pem" ] || cp "$key_file" "/etc/apk/keys/openwrt-passwall-build.pem" 2>/dev/null
                 msg ok "Feed key already exists"
                 return 0
             fi
@@ -428,8 +512,16 @@ install_feed_key() {
                 rm -f /tmp/passwall.pub 2>/dev/null
                 return 0
             fi
+
+            if ! grep -q 'BEGIN PUBLIC KEY' /tmp/passwall.pub 2>/dev/null || ! grep -q 'END PUBLIC KEY' /tmp/passwall.pub 2>/dev/null; then
+                msg warn "The downloaded feed signing key is not a valid PEM public key. Skipping feed key..."
+                rm -f /tmp/passwall.pub 2>/dev/null
+                return 0
+            fi
+
             mkdir -p /etc/apk/keys 2>/dev/null
             if cp /tmp/passwall.pub "$key_file" 2>/dev/null; then
+                cp /tmp/passwall.pub "/etc/apk/keys/openwrt-passwall-build.pem" 2>/dev/null
                 msg ok "Feed key added"
             else
                 msg warn "Failed to save feed key to $key_file; continuing..."
@@ -456,17 +548,42 @@ install_feed_key() {
 
 get_feed_url() {
     local feed="$1"
+    local is_snapshot=false
 
-    case "$PACKAGE_MANAGER" in
-        apk) echo "${FEED_BASE_URL}/releases/packages-${RELEASE_VER}/${ARCH}/${feed}/packages.adb" ;;
-        opkg) echo "${FEED_BASE_URL}/releases/packages-${RELEASE_VER}/${ARCH}/${feed}" ;;
+    case "$RELEASE_VER" in
+        *SNAPSHOT*|*snapshot*) is_snapshot=true ;;
     esac
+    if [ -r /etc/openwrt_release ] && grep -qi SNAPSHOT /etc/openwrt_release; then
+        is_snapshot=true
+    fi
+
+    if [ "$is_snapshot" = true ]; then
+        case "$PACKAGE_MANAGER" in
+            apk) echo "${FEED_BASE_URL}/snapshots/packages/${ARCH}/${feed}/packages.adb" ;;
+            opkg) echo "${FEED_BASE_URL}/snapshots/packages/${ARCH}/${feed}" ;;
+        esac
+    else
+        case "$PACKAGE_MANAGER" in
+            apk) echo "${FEED_BASE_URL}/releases/packages-${RELEASE_VER}/${ARCH}/${feed}/packages.adb" ;;
+            opkg) echo "${FEED_BASE_URL}/releases/packages-${RELEASE_VER}/${ARCH}/${feed}" ;;
+        esac
+    fi
 }
 
 configure_feeds() {
+    if [ "$NO_FEED" = true ]; then
+        msg info "Passwall build feed skipped (--no-feed)"
+        return 0
+    fi
+
     msg head "Feed configuration"
 
-    if [ -z "$RELEASE_VER" ]; then
+    local is_snapshot=false
+    if [ -r /etc/openwrt_release ] && grep -qi SNAPSHOT /etc/openwrt_release; then
+        is_snapshot=true
+    fi
+
+    if [ -z "$RELEASE_VER" ] && [ "$is_snapshot" = false ]; then
         msg warn "OpenWrt release not detected; skipping feed configuration."
         return 0
     fi
@@ -727,19 +844,25 @@ show_help() {
     echo "  -f, --full                 Full feature install (includes chinadns-ng hysteria haproxy microsocks naiveproxy)."
     echo "  -s, --singbox              Minimal install with only sing-box core (no extra cores or features)."
     echo "  -x, --xray                 Minimal install with only xray core (no extra cores or features)."
+    echo "  -lb, --loadbalancing       Install and ensure load balancing packages (haproxy, microsocks)."
     echo "  -i, --iran                 Apply Iran specific configurations."
     echo "  -rw, --root-wifi           Root and WiFi setup (sets passwords to 123456789)."
     echo "  -rb, --reset-button        Modify reset button to clear root password (5s press) instead of factory reset."
+    echo "  -nf, --no-feed             Do not add the passwall build feed; install cores from existing feeds."
+    echo "  -ns, --no-restart          Do not restart Passwall2 services after installation."
     echo "  -h, --help                 Show this help message."
     echo ""
     echo "Examples:"
     echo "  $0                         Install latest from SourceForge feed with both cores (default)"
     echo "  $0 -x                      Install latest from SourceForge feed with xray core only"
     echo "  $0 -s                      Install latest from SourceForge feed with sing-box core only"
+    echo "  $0 -x -lb                  Install latest from SourceForge feed with xray core and load balancing"
+    echo "  $0 -s -lb                  Install latest from SourceForge feed with sing-box core and load balancing"
     echo "  $0 -g                      Install latest from GitHub"
     echo "  $0 -g -x                   Install latest from GitHub with xray core only"
     echo "  $0 -gm                     Install latest from Iranian GitHub mirror (scorpian.ir)"
     echo "  $0 -gm -x                  Install latest from Iranian GitHub mirror with xray core only"
+    echo "  $0 -gm -s -lb              Install latest from Iranian GitHub mirror with sing-box and load balancing"
     echo "  $0 -g 26.8.17-1            Install specific version from GitHub"
     echo "  $0 -g -c                   Clean install from GitHub (latest)"
     echo "  $0 -gm -c                  Clean install from Iranian GitHub mirror (latest)"
@@ -759,6 +882,7 @@ FULL_FEATURE=false
 SINGBOX_ONLY=false
 XRAY_ONLY=false
 MOD_RESET_BTN=false
+LOAD_BALANCING=false
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -784,9 +908,12 @@ while [ "$#" -gt 0 ]; do
         -f|--full) FULL_FEATURE=true; shift ;;
         -s|--singbox) SINGBOX_ONLY=true; shift ;;
         -x|--xray) XRAY_ONLY=true; shift ;;
+        -lb|--loadbalancing|--load-balancing) LOAD_BALANCING=true; shift ;;
         -rw|--root-wifi) ROOT_WIFI=true; shift ;;
         -i|--iran) IRAN_CONFIG=true; shift ;;
         -rb|--reset-button) MOD_RESET_BTN=true; shift ;;
+        -nf|--no-feed) NO_FEED=true; shift ;;
+        -ns|--no-restart) RESTART_SERVICES=false; shift ;;
         -*) msg err "Unknown option: $1" ;;
         *) msg err "Unknown argument: $1. Use --github or --github-mirror flag to specify version." ;;
     esac
@@ -840,6 +967,14 @@ elif [ "$SINGBOX_ONLY" = true ]; then
     FEED_RUNTIME_PACKAGES="$FEED_RUNTIME_PACKAGES_SINGBOX"
 else
     FEED_RUNTIME_PACKAGES="$FEED_RUNTIME_PACKAGES"
+fi
+
+if [ "$LOAD_BALANCING" = true ]; then
+    if [ "$FULL_FEATURE" = true ]; then
+        msg info "Load balancing packages already included in full profile (-f); skipping -lb."
+    else
+        FEED_RUNTIME_PACKAGES="$FEED_RUNTIME_PACKAGES haproxy microsocks"
+    fi
 fi
 
 msg head "System checks"
@@ -905,6 +1040,7 @@ if [ -n "$RELEASE_VER" ]; then
 fi
 
 msg head "Preparation"
+record_running_services
 rm -rf "$TEMP_DIR" && mkdir -p "$TEMP_DIR"
 cd "$TEMP_DIR" || msg err "Failed to prepare temp directory"
 
@@ -1148,6 +1284,15 @@ ensure_cores() {
     fi
 
     msg head "Proxy cores verification"
+    ensure_direct_resolver
+
+    if [ "$NO_FEED" = false ]; then
+        msg info "Updating package feeds for proxy cores..."
+        local update_log
+        update_log=$(mktemp /tmp/passwall2-core-update.XXXXXX 2>/dev/null) || update_log="/tmp/passwall2-core-update.log"
+        pkg_update_feed "$update_log" >/dev/null 2>&1 || true
+        rm -f "$update_log"
+    fi
 
     local core=""
     for core in $wanted; do
@@ -1166,7 +1311,7 @@ ensure_cores() {
         # Tier 1: Try package manager from feeds
         local core_log
         core_log=$(mktemp /tmp/passwall2-core.XXXXXX 2>/dev/null) || core_log="/tmp/passwall2-core.log"
-        if pkg_install "$core" >"$core_log" 2>&1 && [ -x "/usr/bin/$bin_name" ]; then
+        if pkg_install_feed "$core" >"$core_log" 2>&1 && [ -x "/usr/bin/$bin_name" ]; then
             rm -f "$core_log"
             msg ok "$core installed from package repository"
             continue
@@ -1183,6 +1328,59 @@ ensure_cores() {
             install_xray_from_github
         elif [ "$core" = "sing-box" ]; then
             install_singbox_from_github
+        fi
+    done
+}
+
+ensure_load_balancing() {
+    [ "$ONLY_LUCI" = true ] && return 0
+    [ "$LOAD_BALANCING" = true ] || return 0
+
+    if [ "$FULL_FEATURE" = true ]; then
+        return 0
+    fi
+
+    msg head "Load balancing verification"
+    local lb_pkg
+    for lb_pkg in haproxy microsocks; do
+        if pkg_is_installed "$lb_pkg"; then
+            msg ok "$lb_pkg is already installed"
+            continue
+        fi
+
+        # Check if an uninstalled local package archive exists in current temp directory
+        local local_file=""
+        local candidate
+        for candidate in "${lb_pkg}_"*."$PACKAGE_TYPE" "${lb_pkg}-"*."$PACKAGE_TYPE"; do
+            if [ -f "$candidate" ]; then
+                local_file="$candidate"
+                break
+            fi
+        done
+
+        if [ -n "$local_file" ]; then
+            msg info "Installing $lb_pkg from local archive ($local_file)..."
+            local lb_log
+            lb_log=$(mktemp /tmp/passwall2-lb.XXXXXX 2>/dev/null) || lb_log="/tmp/passwall2-lb.log"
+            if pkg_install_local "$local_file" >"$lb_log" 2>&1; then
+                rm -f "$local_file" "$lb_log"
+                msg ok "$lb_pkg installed from local archive"
+                continue
+            fi
+            rm -f "$lb_log"
+        fi
+
+        msg info "Installing $lb_pkg from package feeds..."
+        ensure_direct_resolver
+
+        local lb_repo_log
+        lb_repo_log=$(mktemp /tmp/passwall2-lb.XXXXXX 2>/dev/null) || lb_repo_log="/tmp/passwall2-lb.log"
+        if pkg_install_feed "$lb_pkg" >"$lb_repo_log" 2>&1 || pkg_install "$lb_pkg" >"$lb_repo_log" 2>&1; then
+            rm -f "$lb_repo_log"
+            msg ok "$lb_pkg installed from package repository"
+        else
+            rm -f "$lb_repo_log"
+            msg warn "Could not install $lb_pkg from package repository"
         fi
     done
 }
@@ -1300,6 +1498,7 @@ install_from_feed() {
     fi
 
     ensure_cores
+    ensure_load_balancing
 
     msg head "Passwall packages"
     if [ "$CLEAN_INSTALL" = true ]; then
@@ -1499,26 +1698,34 @@ install_from_mirror() {
 
             if [ "$SINGBOX_ONLY" = true ]; then
                 pkg_name=$(get_local_package_name "$pkg_file")
-                case "$pkg_name" in
-                    sing-box|geoview|v2ray-geoip|v2ray-geosite|tcping)
-                        # allowed
-                        ;;
-                    *)
-                        echo -e "${C_CYAN}[INFO]${C_RESET} Skipping $pkg_name (minimal sing-box mode)"
-                        continue
-                        ;;
-                esac
+                if [ "$LOAD_BALANCING" = true ] && { [ "$pkg_name" = "haproxy" ] || [ "$pkg_name" = "microsocks" ]; }; then
+                    :
+                else
+                    case "$pkg_name" in
+                        sing-box|geoview|v2ray-geoip|v2ray-geosite|tcping)
+                            # allowed
+                            ;;
+                        *)
+                            echo -e "${C_CYAN}[INFO]${C_RESET} Skipping $pkg_name (minimal sing-box mode)"
+                            continue
+                            ;;
+                    esac
+                fi
             elif [ "$XRAY_ONLY" = true ]; then
                 pkg_name=$(get_local_package_name "$pkg_file")
-                case "$pkg_name" in
-                    xray-core|geoview|v2ray-geoip|v2ray-geosite|tcping)
-                        # allowed
-                        ;;
-                    *)
-                        echo -e "${C_CYAN}[INFO]${C_RESET} Skipping $pkg_name (minimal xray mode)"
-                        continue
-                        ;;
-                esac
+                if [ "$LOAD_BALANCING" = true ] && { [ "$pkg_name" = "haproxy" ] || [ "$pkg_name" = "microsocks" ]; }; then
+                    :
+                else
+                    case "$pkg_name" in
+                        xray-core|geoview|v2ray-geoip|v2ray-geosite|tcping)
+                            # allowed
+                            ;;
+                        *)
+                            echo -e "${C_CYAN}[INFO]${C_RESET} Skipping $pkg_name (minimal xray mode)"
+                            continue
+                            ;;
+                    esac
+                fi
             fi
 
             ERROR_LOG=$(mktemp)
@@ -1539,6 +1746,7 @@ install_from_mirror() {
         done
 
         ensure_cores
+        ensure_load_balancing
     fi
 
     msg info "Installing LuCI package"
@@ -1672,26 +1880,34 @@ install_from_github() {
 
             if [ "$SINGBOX_ONLY" = true ]; then
                 pkg_name=$(get_local_package_name "$pkg_file")
-                case "$pkg_name" in
-                    sing-box|geoview|v2ray-geoip|v2ray-geosite|tcping)
-                        # allowed
-                        ;;
-                    *)
-                        echo -e "${C_CYAN}[INFO]${C_RESET} Skipping $pkg_name (minimal sing-box mode)"
-                        continue
-                        ;;
-                esac
+                if [ "$LOAD_BALANCING" = true ] && { [ "$pkg_name" = "haproxy" ] || [ "$pkg_name" = "microsocks" ]; }; then
+                    :
+                else
+                    case "$pkg_name" in
+                        sing-box|geoview|v2ray-geoip|v2ray-geosite|tcping)
+                            # allowed
+                            ;;
+                        *)
+                            echo -e "${C_CYAN}[INFO]${C_RESET} Skipping $pkg_name (minimal sing-box mode)"
+                            continue
+                            ;;
+                    esac
+                fi
             elif [ "$XRAY_ONLY" = true ]; then
                 pkg_name=$(get_local_package_name "$pkg_file")
-                case "$pkg_name" in
-                    xray-core|geoview|v2ray-geoip|v2ray-geosite|tcping)
-                        # allowed
-                        ;;
-                    *)
-                        echo -e "${C_CYAN}[INFO]${C_RESET} Skipping $pkg_name (minimal xray mode)"
-                        continue
-                        ;;
-                esac
+                if [ "$LOAD_BALANCING" = true ] && { [ "$pkg_name" = "haproxy" ] || [ "$pkg_name" = "microsocks" ]; }; then
+                    :
+                else
+                    case "$pkg_name" in
+                        xray-core|geoview|v2ray-geoip|v2ray-geosite|tcping)
+                            # allowed
+                            ;;
+                        *)
+                            echo -e "${C_CYAN}[INFO]${C_RESET} Skipping $pkg_name (minimal xray mode)"
+                            continue
+                            ;;
+                    esac
+                fi
             fi
 
             ERROR_LOG=$(mktemp)
@@ -1712,6 +1928,7 @@ install_from_github() {
         done
 
         ensure_cores
+        ensure_load_balancing
     fi
 
     msg info "Installing LuCI package"
@@ -1746,6 +1963,8 @@ fi
 
 cd /tmp && rm -rf "$TEMP_DIR"
 
+restart_running_services
+
 if [ "$IRAN_CONFIG" = true ]; then
     apply_iran_config
 fi
@@ -1762,6 +1981,12 @@ if [ "$ONLY_LUCI" = false ]; then
     if [ ! -x /usr/bin/xray ] && [ ! -x /usr/bin/sing-box ]; then
         msg warn "No proxy core is installed! Passwall2 requires at least xray-core or sing-box to operate."
         msg info "You can install a core manually via: $PACKAGE_MANAGER install xray-core (or sing-box)"
+    fi
+    if [ "$LOAD_BALANCING" = true ] && [ "$FULL_FEATURE" = false ]; then
+        if ! pkg_is_installed haproxy || ! pkg_is_installed microsocks; then
+            msg warn "One or more load balancing packages (haproxy, microsocks) may not be installed."
+            msg info "You can install them manually via: $PACKAGE_MANAGER install haproxy microsocks"
+        fi
     fi
 fi
 

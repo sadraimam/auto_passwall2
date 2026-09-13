@@ -46,11 +46,14 @@ rm -f /tmp/set.sh && wget -O /tmp/set.sh https://raw.githubusercontent.com/sadra
 | `-c` | `--clean` | اجرای Clean Installation. پاکسازی پکیج‌های قبلی Passwall2 و binaryهای اجرا شده قبل از نصب جهت جلوگیری از تداخل. |
 | `-x` | `--xray` | نصب Minimal فقط با هسته **xray-core** (صرفه‌جویی در فضای فلش با حذف sing-box و باینری‌های اضافی). |
 | `-s` | `--singbox` | نصب Minimal فقط با هسته **sing-box** (صرفه‌جویی در فضای فلش با حذف xray-core و باینری‌های اضافی). |
+| `-lb` | `--loadbalancing` | نصب و تضمین پکیج‌های Load Balancing (`haproxy` و `microsocks`). قابل استفاده در کنار پروفایل‌های `-s` یا `-x` یا حالت پیش‌فرض؛ در صورت استفاده همزمان با `-f` به دلیل وجود این پکیج‌ها در نصب کامل به صورت خودکار نادیده گرفته می‌شود. |
 | `-f` | `--full` | نصب Full Feature. شامل تمام proxy coreها و ابزارها: `chinadns-ng`, `hysteria`, `haproxy`, `microsocks`, `naiveproxy`, `xray-core`, `sing-box`, `geoview`, `v2ray-geoip`, `v2ray-geosite`, `tcping`. |
 | `-l` | `--only-luci` | نصب فقط LuCI web interface (`luci-app-passwall2`). بدون دانلود پکیج‌های binary (مفید در صورتی که coreهای سفارشی در فیرمور بیلد شده باشند). |
 | `-i` | `--iran` | اعمال بهینه‌سازی‌های ایران: تنظیم فوری DNS محلی `5.200.200.200` در ابتدای اسکریپت، تنظیم timezone به `Asia/Tehran`، حل مشکل DNS Rebinding پورتال اپراتورها (`my.irancell.ir`, `my.mci.ir`, `login.tci.ir`) و پچ کردن بنر استاتوس Passwall. |
 | `-rw` | `--root-wifi` | تنظیم پسورد root SSH و وای‌فای 2.4GHz/5GHz به `123456789`. |
 | `-rb` | `--reset-button` | بازپیکربندی دکمه ریست سخت‌افزاری: فشردن ۱ ثانیه‌ای برای reboot روتر؛ فشردن ۵ ثانیه‌ای برای پاک کردن پسورد root (`passwd -d root`). |
+| `-nf` | `--no-feed` | عدم افزودن فید passwall build؛ نصب هسته‌ها از مخازن فعلی روتر. |
+| `-ns` | `--no-restart` | عدم ری‌استارت خودکار سرویس‌های Passwall2 پس از اتمام نصب. |
 | `-h` | `--help` | نمایش help و راهنمای سوییچ‌های اسکریپت. |
 
 ---
@@ -75,10 +78,10 @@ sh /tmp/set.sh -g -c
 sh /tmp/set.sh -x -c
 ```
 
-### 4. نصب Minimal فقط با Sing-Box
-نصب فقط هسته `sing-box` و geo-databaseهای لازم:
+### 4. نصب Minimal همراه با Load Balancing (haproxy و microsocks)
+نصب هسته سبک `sing-box` به همراه `haproxy` و `microsocks` برای توزیع بار بین سرورها:
 ```bash
-sh /tmp/set.sh -s -c
+sh /tmp/set.sh -gm -s -lb -i
 ```
 
 ### 5. نصب یک Release Version مشخص
@@ -97,7 +100,7 @@ sh /tmp/set.sh -f -c
 
 ## 📋 System Requirements
 
-- **Supported OS:** OpenWrt (بیلدهای رسمی Release؛ بیلدهای Snapshot پشتیبانی نمی‌شوند).
+- **Supported OS:** OpenWrt (نسخه‌های رسمی Release و نسخه‌های Snapshot پشتیبانی می‌شوند).
 - **Architecture:** `x86_64`, `aarch64_cortex-a53`, `aarch64_cortex-a72`, `aarch64_generic`, `arm_cortex-a7`, `arm_cortex-a15`, `mipsel_24kc`, `mips_24kc` و غیره.
 - **حداقل مشخصات سخت‌افزاری:**
   - **Flash:** 128 MB (حداقل 60 MB+ فضای خالی در overlay)
